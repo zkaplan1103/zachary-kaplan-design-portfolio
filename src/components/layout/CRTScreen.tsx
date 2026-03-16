@@ -57,10 +57,12 @@ export function CRTScreen({ children, dark }: CRTScreenProps) {
       const scaleX   = rendered.width  / MONITOR_NATURAL_WIDTH
       const scaleY   = rendered.height / MONITOR_NATURAL_HEIGHT
 
-      screen.style.left   = `${rendered.left + SCREEN_LEFT_PX * scaleX}px`
-      screen.style.top    = `${rendered.top  + SCREEN_TOP_PX  * scaleY}px`
-      screen.style.width  = `${SCREEN_WIDTH_PX  * scaleX}px`
-      screen.style.height = `${SCREEN_HEIGHT_PX * scaleY}px`
+      // 3px inset on all sides: wrapper edges always sit cleanly behind the bezel,
+      // preventing sub-pixel rendering from exposing the wrapper boundary in light mode.
+      screen.style.left   = `${rendered.left + SCREEN_LEFT_PX * scaleX + 3}px`
+      screen.style.top    = `${rendered.top  + SCREEN_TOP_PX  * scaleY + 3}px`
+      screen.style.width  = `${SCREEN_WIDTH_PX  * scaleX - 6}px`
+      screen.style.height = `${SCREEN_HEIGHT_PX * scaleY - 6}px`
     }
 
     const ro = new ResizeObserver(updateScreenBounds)
@@ -140,12 +142,8 @@ export function CRTScreen({ children, dark }: CRTScreenProps) {
           position: 'fixed',
           zIndex: 1,
           overflow: 'hidden',
-          borderRadius: 4,
+          borderRadius: 12,
           backgroundColor: dark ? '#0d0d0d' : '#f8f7f4',
-          boxShadow: `
-            inset 0 0 80px 40px rgba(0,0,0,${dark ? '0.85' : '0.5'}),
-            inset 0 0 120px 20px rgba(0,0,0,${dark ? '0.4' : '0.2'})
-          `,
           transform: 'perspective(1200px)',
           animation: 'crt-flicker 4s linear infinite',
         }}
