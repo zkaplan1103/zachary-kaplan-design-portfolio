@@ -57,10 +57,10 @@ export function CRTScreen({ children, dark }: CRTScreenProps) {
       const scaleX   = rendered.width  / MONITOR_NATURAL_WIDTH
       const scaleY   = rendered.height / MONITOR_NATURAL_HEIGHT
 
-      screen.style.left   = `${rendered.left + SCREEN_LEFT_PX * scaleX}px`
-      screen.style.top    = `${rendered.top  + SCREEN_TOP_PX  * scaleY}px`
-      screen.style.width  = `${SCREEN_WIDTH_PX  * scaleX}px`
-      screen.style.height = `${SCREEN_HEIGHT_PX * scaleY}px`
+      screen.style.left   = `${rendered.left + SCREEN_LEFT_PX * scaleX - 4}px`
+      screen.style.top    = `${rendered.top  + SCREEN_TOP_PX  * scaleY - 4}px`
+      screen.style.width  = `${SCREEN_WIDTH_PX  * scaleX + 8}px`
+      screen.style.height = `${SCREEN_HEIGHT_PX * scaleY + 8}px`
     }
 
     const ro = new ResizeObserver(updateScreenBounds)
@@ -140,7 +140,8 @@ export function CRTScreen({ children, dark }: CRTScreenProps) {
           position: 'fixed',
           zIndex: 1,
           overflow: 'hidden',
-          borderRadius: 12,
+          borderRadius: 15,
+          padding: '4px',
           backgroundColor: dark ? '#0d0d0d' : '#f8f7f4',
           boxShadow: dark
             ? 'none'
