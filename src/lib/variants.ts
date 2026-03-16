@@ -85,3 +85,23 @@ export const cardHover: Variants = {
     transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] },
   },
 }
+
+// Instant typewriter char reveal — binary appear, not a fade
+export const charReveal: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { duration: 0 },
+  },
+}
+
+// Boot sequence stagger container — delays children to let grid appear first
+export const bootContainer: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 0.8,
+    },
+  },
+}
