@@ -208,7 +208,7 @@ export function CRTScreen({ children, dark }: CRTScreenProps) {
             background: `radial-gradient(
               ellipse at center,
               transparent 50%,
-              rgba(0,0,0,${dark ? '0.7' : '0.5'}) 100%
+              rgba(0,0,0,${dark ? '0.7' : '0.08'}) 100%
             )`,
             pointerEvents: 'none',
           }}
