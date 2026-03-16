@@ -1,5 +1,6 @@
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { IntroAnimation } from '@/components/IntroAnimation'
+import CRTPowerOn from '@/components/CRTPowerOn'
 import { HeroSection } from '@/components/sections/HeroSection'
 import { WorkSection } from '@/components/sections/WorkSection'
 import { AboutSection } from '@/components/sections/AboutSection'
@@ -12,6 +13,7 @@ export function HomePage() {
   return (
     <PageWrapper>
       {!introComplete && <IntroAnimation />}
+      {introComplete && <CRTPowerOn />}
       <HeroSection />
       <WorkSection />
       <AboutSection />

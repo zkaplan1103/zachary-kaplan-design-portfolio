@@ -15,8 +15,8 @@ const ZK_COLS = 30    // Z (14) + gap (2) + K (14)
 const ZK_TOTAL_W = (ZK_COLS - 1) * CELL_SIZE // 29 × 26 = 754px
 const ZK_TOTAL_H = (ZK_ROWS - 1) * CELL_SIZE // 17 × 26 = 442px
 const BAND_WIDTH = 300
-const BAND_ACTIVATION_MS = 250
-const CLUSTER_FIRE_MS = 18
+const BAND_ACTIVATION_MS = 180  // was 250, ×0.72 for faster formation
+const CLUSTER_FIRE_MS = 13      // was 18, ×0.72 for faster formation
 const PULL_MAX_DIST = 800
 const PULL_LERP_MIN = 0.02
 const PULL_LERP_MAX = 0.15
@@ -577,14 +577,28 @@ export function IntroAnimation() {
   const particleColor = theme === 'dark' ? '#ffffff' : '#000000'
   const labelColor = theme === 'dark' ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.4)'
 
+  // ─── CRT power-off variants ────────────────────────────────────────────────
+
+  const powerOffVariants = {
+    normal: {
+      opacity: 1,
+      filter: 'brightness(1)',
+    },
+    off: {
+      opacity: [1, 1, 0],
+      filter: ['brightness(1)', 'brightness(2)', 'brightness(0)'],
+      transition: { duration: 0.3, times: [0, 0.3, 1] },
+    },
+  }
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   return (
     <motion.section
       className={`relative w-full h-screen overflow-hidden select-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
       style={{ cursor: 'none' }}
-      animate={{ y: exitPhase ? '-100vh' : 0 }}
-      transition={{ duration: 0.8, ease: [0.4, 0, 1, 1] }}
+      variants={powerOffVariants}
+      animate={exitPhase ? 'off' : 'normal'}
       onAnimationComplete={() => {
         if (exitPhase) {
           setIntroComplete(true)
