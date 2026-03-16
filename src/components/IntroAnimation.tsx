@@ -614,7 +614,7 @@ export function IntroAnimation() {
   return (
     <motion.section
       className={`relative w-full h-screen overflow-hidden select-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-      style={{ cursor: 'none', transformOrigin: 'center center', position: 'fixed', inset: 0 }}
+      style={{ cursor: 'none', transformOrigin: '50% 38.04%' }}
       variants={powerOffVariants}
       animate={exitPhase ? 'off' : 'normal'}
       onAnimationComplete={() => {
