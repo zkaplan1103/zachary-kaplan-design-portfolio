@@ -45,7 +45,7 @@ export default function CRTPowerOn() {
         animate={{ opacity: [1, 1, 0] }}
         transition={{
           duration: 2.8,
-          times: [0, 0.5, 1],
+          times: [0, 0.2, 1],
           ease: 'easeIn' as const,
         }}
         onAnimationComplete={() => setDone(true)}
@@ -63,8 +63,8 @@ export default function CRTPowerOn() {
         initial={{ opacity: 0 }}
         animate={{ opacity: [0, 0, 0.55, 0] }}
         transition={{
-          duration: 2.8,
-          times: [0, 0.45, 0.72, 1],
+          duration: 1.5,
+          times: [0, 0.35, 0.65, 1],
           ease: 'easeInOut' as const,
         }}
         style={{
