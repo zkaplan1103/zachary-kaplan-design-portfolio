@@ -1,9 +1,10 @@
 import { motion } from 'framer-motion'
 import { ArrowDown } from 'lucide-react'
-import { useLenis } from 'lenis/react'
-import { MagneticButton } from '@/components/animations/MagneticButton'
-import { Button } from '@/components/ui/Button'
-import { slideUp, charReveal, bootContainer } from '@/lib/variants'
+// import { useLenis } from 'lenis/react'
+// import { MagneticButton } from '@/components/animations/MagneticButton'
+// import { Button } from '@/components/ui/Button'
+// import { slideUp } from '@/lib/variants'
+import { charReveal, bootContainer } from '@/lib/variants'
 import { useUIStore } from '@/store/uiStore'
 
 // ── Sub-components ──────────────────────────────────────────────────────────
@@ -104,13 +105,8 @@ function HorizonLine({ dark }: EnvProps) {
 const NAME_CHARS = 'ZACHARY KAPLAN'.split('')
 
 export function HeroSection() {
-  const lenis = useLenis()
   const theme = useUIStore((s) => s.theme)
   const dark = theme === 'dark'
-
-  function scrollTo(id: string) {
-    lenis?.scrollTo(`#${id}`, { offset: -64 })
-  }
 
   return (
     <section
@@ -224,7 +220,7 @@ export function HeroSection() {
           </motion.span>
         </motion.p>
 
-        {/* CTAs — slideUp with boot delay override */}
+        {/* CTAs — commented out while building theme
         <motion.div
           variants={slideUp}
           initial="hidden"
@@ -244,6 +240,7 @@ export function HeroSection() {
             </Button>
           </MagneticButton>
         </motion.div>
+        */}
       </div>
 
       {/*
