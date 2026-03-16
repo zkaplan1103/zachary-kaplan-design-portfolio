@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
 import { useUIStore } from '@/store/uiStore'
+import { BEZEL } from '@/config/bezel'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -460,12 +461,27 @@ export function IntroAnimation() {
   // ── Event handlers ─────────────────────────────────────────────────────────
 
   useEffect(() => {
+    function toCanvasCoords(clientX: number, clientY: number) {
+      const canvas = canvasRef.current
+      if (!canvas) return { x: clientX, y: clientY }
+      const rect = canvas.getBoundingClientRect()
+      return {
+        x: (clientX - rect.left) * (canvas.width / rect.width),
+        y: (clientY - rect.top) * (canvas.height / rect.height),
+      }
+    }
+
     function onMouseMove(e: MouseEvent) {
-      const sx = window.scrollX
-      const sy = window.scrollY
-      mouseRef.current = { x: e.clientX + sx, y: e.clientY + sy }
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const rect = canvas.getBoundingClientRect()
+      mouseRef.current = {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height),
+      }
       if (labelRef.current && phaseRef.current === 'idle') {
-        labelRef.current.style.transform = `translate(${e.clientX + sx + 16}px, ${e.clientY + sy - 8}px)`
+        // label is absolute inside section — subtract section origin to get section-local coords
+        labelRef.current.style.transform = `translate(${e.clientX - rect.left + 10}px, ${e.clientY - rect.top + 8}px)`
         labelRef.current.style.opacity = '1'
       }
     }
@@ -476,7 +492,8 @@ export function IntroAnimation() {
         labelRef.current.style.transition = 'opacity 0.08s'
         labelRef.current.style.opacity = '0'
       }
-      assignZK(e.clientX + window.scrollX, e.clientY + window.scrollY)
+      const { x: cx, y: cy } = toCanvasCoords(e.clientX, e.clientY)
+      assignZK(cx, cy)
       formingStartRef.current = Date.now()
       phaseRef.current = 'forming'
     }
@@ -610,7 +627,7 @@ export function IntroAnimation() {
   return (
     <motion.section
       className={`relative w-full h-screen overflow-hidden select-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-      style={{ cursor: 'pointer', transformOrigin: '50% 38.04%' }}
+      style={{ cursor: 'pointer', transformOrigin: `50% ${BEZEL.transformOriginY}%` }}
       variants={powerOffVariants}
       animate={exitPhase ? 'off' : 'normal'}
       onAnimationComplete={() => {

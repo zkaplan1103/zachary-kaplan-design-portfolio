@@ -1,16 +1,15 @@
 /**
- * Screen cutout as percentages of PNG natural size (1225×815):
- *   left:   77  / 1225 = 6.286%
- *   top:    51  / 815  = 6.258%
- *   width:  1070 / 1225 = 87.347%
- *   height: 620  / 815  = 76.074%
+ * Screen cutout measurements live in src/config/bezel.ts (auto-generated).
+ * To update after swapping the bezel PNG:
+ *   1. Update the PNG import in CRTScreen.tsx (one line below via bezel.ts)
+ *   2. npm run measure-bezel -- src/assets/images/new-bezel.png
+ *   3. Commit bezel.ts
  *
  * With object-fit: fill the PNG stretches to exactly 100vw × 100vh,
- * so these percentages map directly to vw/vh viewport units.
- * No ResizeObserver or JS measurement needed.
+ * so screen cutout percentages map directly to vw/vh viewport units.
  */
 
-import monitorPng from '@/assets/images/monitor-v2-cropped.png'
+import { monitorPng, BEZEL } from '@/config/bezel'
 
 interface CRTScreenProps {
   children: React.ReactNode
@@ -91,14 +90,14 @@ export function CRTScreen({ children, dark }: CRTScreenProps) {
       <div
         style={{
           position: 'fixed',
-          left: 'calc(6.286vw - 6px)',
-          top: 'calc(6.258vh - 6px)',
-          width: 'calc(87.347vw + 12px)',
-          height: 'calc(76.074vh + 12px)',
+          left: `calc(${BEZEL.screen.left}vw - ${BEZEL.bleedPx}px)`,
+          top: `calc(${BEZEL.screen.top}vh - ${BEZEL.bleedPx}px)`,
+          width: `calc(${BEZEL.screen.width}vw + ${BEZEL.bleedPx * 2}px)`,
+          height: `calc(${BEZEL.screen.height}vh + ${BEZEL.bleedPx * 2}px)`,
           zIndex: 1,
           overflow: 'hidden',
           borderRadius: 8,
-          padding: 'calc(6.258vh + 2px) calc(6.286vw + 2px)',
+          padding: `${BEZEL.paddingPx}px`,
           backgroundColor: dark ? '#0d0d0d' : '#f8f7f4',
           boxShadow: dark
             ? 'none'
