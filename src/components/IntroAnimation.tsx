@@ -581,13 +581,31 @@ export function IntroAnimation() {
 
   const powerOffVariants = {
     normal: {
+      scaleY: 1,
+      scaleX: 1,
       opacity: 1,
-      filter: 'brightness(1)',
+      filter: 'brightness(1) hue-rotate(0deg)',
     },
     off: {
-      opacity: [1, 1, 0],
-      filter: ['brightness(1)', 'brightness(2)', 'brightness(0)'],
-      transition: { duration: 0.3, times: [0, 0.3, 1] },
+      // Phase 1 (0→200ms): instant vertical collapse → thin phosphor line
+      // Phase 2 (200→300ms): line holds, phosphor overdriven + green tint
+      // Phase 3 (300→450ms): horizontal shrink to dot, intense white glow
+      // Phase 4 (450→550ms): dot cuts to black
+      scaleY: [1,     0.015, 0.015, 0.015, 0   ],
+      scaleX: [1,     1,     1,     0.04,  0   ],
+      opacity: [1,    1,     1,     1,     0   ],
+      filter: [
+        'brightness(1) hue-rotate(0deg)',
+        'brightness(3) hue-rotate(20deg)',
+        'brightness(2) hue-rotate(15deg)',
+        'brightness(5) hue-rotate(0deg)',
+        'brightness(0) hue-rotate(0deg)',
+      ],
+      transition: {
+        duration: 0.55,
+        times: [0, 0.36, 0.55, 0.82, 1.0],
+        ease: 'linear' as const,
+      },
     },
   }
 
@@ -596,7 +614,7 @@ export function IntroAnimation() {
   return (
     <motion.section
       className={`relative w-full h-screen overflow-hidden select-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-      style={{ cursor: 'none' }}
+      style={{ cursor: 'none', transformOrigin: 'center center' }}
       variants={powerOffVariants}
       animate={exitPhase ? 'off' : 'normal'}
       onAnimationComplete={() => {
