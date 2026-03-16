@@ -15,8 +15,8 @@ const ZK_COLS = 30    // Z (14) + gap (2) + K (14)
 const ZK_TOTAL_W = (ZK_COLS - 1) * CELL_SIZE // 29 × 26 = 754px
 const ZK_TOTAL_H = (ZK_ROWS - 1) * CELL_SIZE // 17 × 26 = 442px
 const BAND_WIDTH = 300
-const BAND_ACTIVATION_MS = 180  // was 250, ×0.72 for faster formation
-const CLUSTER_FIRE_MS = 13      // was 18, ×0.72 for faster formation
+const BAND_ACTIVATION_MS = 90   // was 180, ×0.5 for faster formation
+const CLUSTER_FIRE_MS = 6       // was 13, ×0.5 for faster formation
 const PULL_MAX_DIST = 800
 const PULL_LERP_MIN = 0.02
 const PULL_LERP_MAX = 0.15
@@ -113,7 +113,6 @@ export function IntroAnimation() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const labelRef = useRef<HTMLDivElement>(null)
-  const cursorDotRef = useRef<HTMLDivElement>(null)
   const particlesRef = useRef<Particle[]>([])
   const phaseRef = useRef<Phase>('idle')
   const mouseRef = useRef({ x: -500, y: -500 })
@@ -465,9 +464,6 @@ export function IntroAnimation() {
       const sx = window.scrollX
       const sy = window.scrollY
       mouseRef.current = { x: e.clientX + sx, y: e.clientY + sy }
-      if (cursorDotRef.current) {
-        cursorDotRef.current.style.transform = `translate(${e.clientX + sx - 3}px, ${e.clientY + sy - 3}px)`
-      }
       if (labelRef.current && phaseRef.current === 'idle') {
         labelRef.current.style.transform = `translate(${e.clientX + sx + 16}px, ${e.clientY + sy - 8}px)`
         labelRef.current.style.opacity = '1'
@@ -614,7 +610,7 @@ export function IntroAnimation() {
   return (
     <motion.section
       className={`relative w-full h-screen overflow-hidden select-none ${theme === 'dark' ? 'bg-black' : 'bg-white'}`}
-      style={{ cursor: 'none', transformOrigin: '50% 38.04%' }}
+      style={{ cursor: 'pointer', transformOrigin: '50% 38.04%' }}
       variants={powerOffVariants}
       animate={exitPhase ? 'off' : 'normal'}
       onAnimationComplete={() => {
@@ -625,13 +621,6 @@ export function IntroAnimation() {
       }}
     >
       <canvas ref={canvasRef} className="absolute inset-0" />
-
-      {/* Cursor dot */}
-      <div
-        ref={cursorDotRef}
-        className="absolute top-0 left-0 rounded-full bg-accent pointer-events-none"
-        style={{ width: '6px', height: '6px', transform: 'translate(-500px,-500px)', willChange: 'transform' }}
-      />
 
       {/* "click and hold" label */}
       <div
