@@ -1,28 +1,26 @@
-import { useRef } from 'react'
-import { motion, useScroll, useTransform, MotionValue } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { ArrowDown } from 'lucide-react'
+// import { useLenis } from 'lenis/react'
+// import { MagneticButton } from '@/components/animations/MagneticButton'
+// import { Button } from '@/components/ui/Button'
+// import { slideUp } from '@/lib/variants'
 import { charReveal, bootContainer } from '@/lib/variants'
 import { useUIStore } from '@/store/uiStore'
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-interface GridFloorProps {
+interface EnvProps {
   dark: boolean
-  scrollYProgress: MotionValue<number>
 }
 
 /**
  * GridFloor — CSS 3D perspective grid plane (bottom 60% of hero section).
  * perspective + rotateX creates the classic converging retrowave floor look.
  * Grid lines converge at the vanishing point (top-center of the container).
- * PS2 palette: electric blue lines instead of phosphor green.
  */
-function GridFloor({ dark, scrollYProgress }: GridFloorProps) {
-  const gridColor = dark ? 'rgba(65,105,255,0.16)' : 'rgba(100,80,40,0.10)'
-  const fogColor = dark ? '#070714' : '#f8f7f4'
-
-  // Scroll-driven parallax — grid recedes as hero exits
-  const gridY = useTransform(scrollYProgress, [0, 1], [0, 80])
+function GridFloor({ dark }: EnvProps) {
+  const gridColor = dark ? 'rgba(80,255,100,0.14)' : 'rgba(100,80,40,0.10)'
+  const fogColor = dark ? '#0d0d0d' : '#f8f7f4'
 
   return (
     <motion.div
@@ -43,8 +41,8 @@ function GridFloor({ dark, scrollYProgress }: GridFloorProps) {
         zIndex: 0,
       }}
     >
-      {/* Rotated grid plane — y parallax on scroll */}
-      <motion.div
+      {/* Rotated grid plane — hinge at top edge = horizon */}
+      <div
         style={{
           position: 'absolute',
           top: 0,
@@ -53,7 +51,6 @@ function GridFloor({ dark, scrollYProgress }: GridFloorProps) {
           height: '400%',
           transform: 'rotateX(80deg)',
           transformOrigin: '50% 0%',
-          y: gridY,
           backgroundImage: [
             `repeating-linear-gradient(${gridColor} 0, ${gridColor} 1px, transparent 1px, transparent 70px)`,
             `repeating-linear-gradient(90deg, ${gridColor} 0, ${gridColor} 1px, transparent 1px, transparent 70px)`,
@@ -76,11 +73,11 @@ function GridFloor({ dark, scrollYProgress }: GridFloorProps) {
 
 /**
  * HorizonLine — 1px glowing line at the grid/sky boundary.
- * PS2 palette: cyan glow instead of green.
+ * Positioned at the top of the GridFloor (bottom: 60% of section).
  */
-function HorizonLine({ dark }: { dark: boolean }) {
-  const lineColor = dark ? 'rgba(65,105,255,0.75)' : 'rgba(150,120,60,0.5)'
-  const glowColor = dark ? 'rgba(0,200,255,0.22)' : 'rgba(150,120,60,0.12)'
+function HorizonLine({ dark }: EnvProps) {
+  const lineColor = dark ? 'rgba(80,255,100,0.7)' : 'rgba(150,120,60,0.5)'
+  const glowColor = dark ? 'rgba(80,255,100,0.2)' : 'rgba(150,120,60,0.12)'
 
   return (
     <motion.div
@@ -96,7 +93,7 @@ function HorizonLine({ dark }: { dark: boolean }) {
         height: '1px',
         zIndex: 1,
         background: `linear-gradient(90deg, transparent 0%, ${lineColor} 20%, ${lineColor} 80%, transparent 100%)`,
-        boxShadow: `0 0 10px 3px ${glowColor}`,
+        boxShadow: `0 0 8px 2px ${glowColor}`,
         pointerEvents: 'none',
       }}
     />
@@ -111,23 +108,16 @@ export function HeroSection() {
   const theme = useUIStore((s) => s.theme)
   const dark = theme === 'dark'
 
-  const heroRef = useRef<HTMLElement>(null)
-  const { scrollYProgress } = useScroll({
-    target: heroRef,
-    offset: ['start start', 'end start'],
-  })
-
   return (
     <section
-      ref={heroRef}
       style={{
         position: 'relative',
         minHeight: '100vh',
         overflow: 'hidden',
       }}
     >
-      {/* z:0 — 3D grid floor with scroll parallax */}
-      <GridFloor dark={dark} scrollYProgress={scrollYProgress} />
+      {/* z:0 — 3D grid floor (bottom 60% of section) */}
+      <GridFloor dark={dark} />
 
       {/* z:1 — Horizon glow line at grid/sky boundary */}
       <HorizonLine dark={dark} />
@@ -135,6 +125,7 @@ export function HeroSection() {
       {/*
        * z:10 — Text content.
        * Occupies top 60% of section (above horizon), content centered within.
+       * Text floats visually above the grid floor.
        */}
       <div
         style={{
@@ -161,7 +152,7 @@ export function HeroSection() {
             fontSize: '0.7rem',
             letterSpacing: '0.25em',
             textTransform: 'uppercase' as const,
-            color: dark ? 'rgba(65,105,255,0.55)' : 'rgba(100,80,40,0.5)',
+            color: dark ? 'rgba(80,255,100,0.5)' : 'rgba(100,80,40,0.5)',
             marginBottom: '2rem',
           }}
         >
@@ -228,10 +219,35 @@ export function HeroSection() {
             █
           </motion.span>
         </motion.p>
+
+        {/* CTAs — commented out while building theme
+        <motion.div
+          variants={slideUp}
+          initial="hidden"
+          animate="visible"
+          custom={2.4}
+          transition={{ delay: 2.4, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+          style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' as const, justifyContent: 'center' }}
+        >
+          <MagneticButton>
+            <Button size="lg" onClick={() => scrollTo('work')}>
+              View Work
+            </Button>
+          </MagneticButton>
+          <MagneticButton>
+            <Button size="lg" variant="secondary" onClick={() => scrollTo('contact')}>
+              Get in Touch
+            </Button>
+          </MagneticButton>
+        </motion.div>
+        */}
       </div>
 
       {/*
-       * Scroll indicator — position:fixed relative to CRTScreen wrapper.
+       * Scroll indicator.
+       * position:fixed inside CRTScreen (which has transform:perspective) =
+       * fixed relative to the screen wrapper (not the browser viewport).
+       * Anchors to the bottom of the visible CRT screen regardless of section height.
        */}
       <motion.div
         initial={{ opacity: 0 }}

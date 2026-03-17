@@ -12,10 +12,6 @@
 
   /* Brand accent (constant across themes) */
   --color-accent: #c9a96e;
-
-  /* PS2 electric palette (constant) */
-  --color-electric: #4169ff;
-  --color-cyan: #00c8ff;
 }
 
 /* Semantic tokens — reference CSS vars that flip with .dark */
@@ -36,13 +32,13 @@
   --surface: #ffffff;
 }
 
-/* Dark theme — PS2 deep navy-black */
+/* Dark theme */
 .dark {
-  --bg: #070714;
+  --bg: #0d0d0d;
   --fg: #f0efe9;
   --muted: #7a7972;
-  --border: #1a1a3a;
-  --surface: #0e0e24;
+  --border: #222220;
+  --surface: #161614;
 }
 
 /* Base resets */

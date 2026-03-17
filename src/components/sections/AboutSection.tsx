@@ -34,8 +34,8 @@ function HudBadge({ children, dark }: { children: React.ReactNode; dark: boolean
         fontFamily: 'var(--font-mono)',
         fontSize: '0.6rem',
         letterSpacing: '0.14em',
-        color: dark ? 'rgba(65,105,255,0.55)' : 'rgba(100,80,40,0.45)',
-        border: `1px solid ${dark ? 'rgba(65,105,255,0.22)' : 'rgba(150,120,60,0.2)'}`,
+        color: dark ? 'rgba(80,255,100,0.5)' : 'rgba(100,80,40,0.45)',
+        border: `1px solid ${dark ? 'rgba(80,255,100,0.2)' : 'rgba(150,120,60,0.2)'}`,
         padding: '3px 8px',
         borderRadius: 2,
         whiteSpace: 'nowrap' as const,
@@ -73,24 +73,25 @@ export function AboutSection() {
     mouseY.set(0)
   }
 
-  // ── Scroll-linked rotation ───────────────────────────────────────────────
+  // ── Scroll-linked rotation (same pattern as ParallaxLayer) ───────────────
   const { scrollYProgress } = useScroll({
     target: sectionRef,
     offset: ['start end', 'end start'],
   })
+  // entering from below (8°) → centered (5°) → above viewport (2°)
   const scrollRotateY = useTransform(scrollYProgress, [0, 0.5, 1], [8, 5, 2])
 
-  // ── Theme colors — PS2 electric blue (dark) / warm gold (light) ──────────
-  const cardBg = dark ? 'rgba(7, 7, 20, 0.97)' : 'rgba(252, 250, 246, 0.97)'
-  const cardBorder = dark ? 'rgba(65,105,255,0.28)' : 'rgba(150,120,60,0.3)'
+  // ── Theme colors ─────────────────────────────────────────────────────────
+  const cardBg = dark ? 'rgba(10, 16, 10, 0.96)' : 'rgba(252, 250, 246, 0.97)'
+  const cardBorder = dark ? 'rgba(80,255,100,0.25)' : 'rgba(150,120,60,0.3)'
   const cardGlow = dark
-    ? '0 0 40px rgba(65,105,255,0.08), 0 25px 60px rgba(0,0,0,0.6)'
+    ? '0 0 40px rgba(80,255,100,0.06), 0 25px 60px rgba(0,0,0,0.6)'
     : '0 20px 60px rgba(0,0,0,0.1), inset 0 0 60px rgba(150,120,60,0.04)'
-  const hudText = dark ? 'rgba(65,105,255,0.65)' : 'rgba(100,80,40,0.55)'
-  const hudBg = dark ? 'rgba(65,105,255,0.06)' : 'rgba(150,120,60,0.06)'
-  const photoBorder = dark ? 'rgba(65,105,255,0.16)' : 'rgba(150,120,60,0.2)'
-  const redact = dark ? 'rgba(0,200,255,0.35)' : 'rgba(100,80,40,0.18)'
-  const bracketColor = dark ? 'rgba(65,105,255,0.45)' : 'rgba(150,120,60,0.35)'
+  const hudText = dark ? 'rgba(80,255,100,0.6)' : 'rgba(100,80,40,0.55)'
+  const hudBg = dark ? 'rgba(80,255,100,0.05)' : 'rgba(150,120,60,0.06)'
+  const photoBorder = dark ? 'rgba(80,255,100,0.15)' : 'rgba(150,120,60,0.2)'
+  const redact = dark ? 'rgba(80,255,100,0.32)' : 'rgba(100,80,40,0.18)'
+  const bracketColor = dark ? 'rgba(80,255,100,0.4)' : 'rgba(150,120,60,0.35)'
 
   return (
     <section
@@ -115,7 +116,7 @@ export function AboutSection() {
           fontFamily: 'var(--font-mono)',
           fontSize: '0.6rem',
           letterSpacing: '0.2em',
-          color: dark ? 'rgba(65,105,255,0.20)' : 'rgba(100,80,40,0.18)',
+          color: dark ? 'rgba(80,255,100,0.18)' : 'rgba(100,80,40,0.18)',
           textTransform: 'uppercase' as const,
           pointerEvents: 'none',
         }}
@@ -152,17 +153,18 @@ export function AboutSection() {
 
           {/*
            * ── Layer 1: Entrance ──────────────────────────────────────────
-           * opacity + y + blur — no rotateY (avoids conflict with scroll layer)
+           * Handles opacity + y only — no rotateY conflict with scroll layer
            */}
           <motion.div
-            initial={{ opacity: 0, y: 50, filter: 'blur(4px)' }}
-            whileInView={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            initial={{ opacity: 0, y: 50 }}
+            whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true, amount: 0.15 }}
             transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
             style={{ transformStyle: 'preserve-3d' as const }}
           >
             {/*
              * ── Layer 2: Scroll rotation ───────────────────────────────
+             * rotateY driven by scrollYProgress via useTransform
              */}
             <motion.div
               style={{
@@ -171,7 +173,9 @@ export function AboutSection() {
               }}
             >
               {/*
-               * ── Layer 3: Mouse rotation + idle float ──────────────────
+               * ── Layer 3: Mouse rotation ────────────────────────────
+               * rotateX + rotateY from mouse springs
+               * Idle float (y) lives here — separate from scroll rotation
                */}
               <motion.div
                 style={{
@@ -218,7 +222,7 @@ export function AboutSection() {
                         left: 0,
                         right: 0,
                         height: 2,
-                        background: 'rgba(65,105,255,0.12)',
+                        background: 'rgba(80,255,100,0.12)',
                         zIndex: 20,
                         pointerEvents: 'none',
                       }}
@@ -238,7 +242,7 @@ export function AboutSection() {
                   >
                     {/* Traffic dots */}
                     <div style={{ display: 'flex', gap: 6 }}>
-                      {['#ff5f56', '#ffbd2e', dark ? 'rgba(65,105,255,0.8)' : '#27c93f'].map(
+                      {['#ff5f56', '#ffbd2e', dark ? 'rgba(80,255,100,0.7)' : '#27c93f'].map(
                         (c, i) => (
                           <div
                             key={i}
@@ -264,7 +268,7 @@ export function AboutSection() {
                         fontFamily: 'var(--font-mono)',
                         fontSize: '0.6rem',
                         letterSpacing: '0.1em',
-                        color: dark ? 'rgba(65,105,255,0.32)' : 'rgba(100,80,40,0.28)',
+                        color: dark ? 'rgba(80,255,100,0.3)' : 'rgba(100,80,40,0.28)',
                       }}
                     >
                       [CLASSIFIED]
@@ -289,7 +293,7 @@ export function AboutSection() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         gap: 16,
-                        backgroundColor: dark ? 'rgba(65,105,255,0.03)' : 'rgba(150,120,60,0.03)',
+                        backgroundColor: dark ? 'rgba(80,255,100,0.02)' : 'rgba(150,120,60,0.03)',
                       }}
                     >
                       <div
@@ -412,7 +416,7 @@ export function AboutSection() {
                           color:
                             item === '·'
                               ? dark
-                                ? 'rgba(65,105,255,0.20)'
+                                ? 'rgba(80,255,100,0.18)'
                                 : 'rgba(100,80,40,0.18)'
                               : hudText,
                         }}

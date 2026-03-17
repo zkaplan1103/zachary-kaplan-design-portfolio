@@ -105,33 +105,3 @@ export const bootContainer: Variants = {
     },
   },
 }
-
-// Depth entrance — scales in from "behind" with blur clear (PS2 depth reveal)
-export const depthReveal: Variants = {
-  hidden: { opacity: 0, scale: 0.88, filter: 'blur(6px)' },
-  visible: {
-    opacity: 1,
-    scale: 1,
-    filter: 'blur(0px)',
-    transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] },
-  },
-}
-
-// Stagger parent for project card grid
-export const cardStagger: Variants = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.12, delayChildren: 0.1 },
-  },
-}
-
-// PS2 load expand — card zooms out before route transition
-export const loadExpand: Variants = {
-  idle: { scale: 1, opacity: 1, filter: 'blur(0px)' },
-  expanding: {
-    scale: 3.5,
-    opacity: 0,
-    filter: 'blur(24px)',
-    transition: { duration: 0.55, ease: [0.8, 0, 1, 1] as [number, number, number, number] },
-  },
-}
