@@ -1,112 +1,76 @@
-import { motion } from 'framer-motion'
-import { ArrowDown } from 'lucide-react'
-// import { useLenis } from 'lenis/react'
-// import { MagneticButton } from '@/components/animations/MagneticButton'
-// import { Button } from '@/components/ui/Button'
-// import { slideUp } from '@/lib/variants'
-import { charReveal, bootContainer } from '@/lib/variants'
-import { useUIStore } from '@/store/uiStore'
+import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
+import { motion, type Variants } from 'framer-motion'
+import { charReveal, fadeIn } from '@/lib/variants'
 
-// ── Sub-components ──────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-interface EnvProps {
-  dark: boolean
+const NAME = 'ZACHARY KAPLAN'
+const NAME_CHARS = NAME.split('')
+
+const heroNameContainer: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.06,
+      delayChildren: 1.0,
+    },
+  },
 }
 
-/**
- * GridFloor — CSS 3D perspective grid plane (bottom 60% of hero section).
- * perspective + rotateX creates the classic converging retrowave floor look.
- * Grid lines converge at the vanishing point (top-center of the container).
- */
-function GridFloor({ dark }: EnvProps) {
-  const gridColor = dark ? 'rgba(80,255,100,0.14)' : 'rgba(100,80,40,0.10)'
-  const fogColor = dark ? '#0d0d0d' : '#f8f7f4'
+const ctaContainer: Variants = {
+  hidden: {},
+  visible: {
+    transition: {
+      staggerChildren: 0.1,
+      delayChildren: 2.8,
+    },
+  },
+}
 
+const CORNERS: CSSProperties[] = [
+  { top: 20, left: 20 },
+  { top: 20, right: 20 },
+  { bottom: 20, left: 20 },
+  { bottom: 20, right: 20 },
+]
+
+// ── Blinking cursor ───────────────────────────────────────────────────────────
+
+function BlinkingCursor() {
   return (
-    <motion.div
-      aria-hidden="true"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 1.2, ease: 'easeOut' }}
-      style={{
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        height: '60%',
-        overflow: 'hidden',
-        perspective: '400px',
-        perspectiveOrigin: '50% 0%',
-        pointerEvents: 'none',
-        zIndex: 0,
+    <motion.span
+      animate={{ opacity: [1, 1, 0, 0] }}
+      transition={{
+        times: [0, 0.49, 0.5, 0.99],
+        repeat: Infinity,
+        duration: 0.8,
+        ease: 'linear' as const,
       }}
-    >
-      {/* Rotated grid plane — hinge at top edge = horizon */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: '-30%',
-          right: '-30%',
-          height: '400%',
-          transform: 'rotateX(80deg)',
-          transformOrigin: '50% 0%',
-          backgroundImage: [
-            `repeating-linear-gradient(${gridColor} 0, ${gridColor} 1px, transparent 1px, transparent 70px)`,
-            `repeating-linear-gradient(90deg, ${gridColor} 0, ${gridColor} 1px, transparent 1px, transparent 70px)`,
-          ].join(', '),
-        }}
-      />
-
-      {/* Depth fog — hides far grid edge, reinforces horizon */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          background: `linear-gradient(to bottom, ${fogColor} 0%, ${fogColor} 8%, transparent 55%)`,
-          pointerEvents: 'none',
-        }}
-      />
-    </motion.div>
-  )
-}
-
-/**
- * HorizonLine — 1px glowing line at the grid/sky boundary.
- * Positioned at the top of the GridFloor (bottom: 60% of section).
- */
-function HorizonLine({ dark }: EnvProps) {
-  const lineColor = dark ? 'rgba(80,255,100,0.7)' : 'rgba(150,120,60,0.5)'
-  const glowColor = dark ? 'rgba(80,255,100,0.2)' : 'rgba(150,120,60,0.12)'
-
-  return (
-    <motion.div
       aria-hidden="true"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ delay: 0.4, duration: 0.6, ease: 'easeOut' }}
       style={{
-        position: 'absolute',
-        bottom: '60%',
-        left: 0,
-        right: 0,
-        height: '1px',
-        zIndex: 1,
-        background: `linear-gradient(90deg, transparent 0%, ${lineColor} 20%, ${lineColor} 80%, transparent 100%)`,
-        boxShadow: `0 0 8px 2px ${glowColor}`,
-        pointerEvents: 'none',
+        display: 'inline-block',
+        width: '0.55em',
+        height: '1em',
+        backgroundColor: 'var(--fg)',
+        marginLeft: '4px',
+        verticalAlign: 'text-bottom',
       }}
     />
   )
 }
 
-// ── Main component ───────────────────────────────────────────────────────────
-
-const NAME_CHARS = 'ZACHARY KAPLAN'.split('')
+// ── Main component ────────────────────────────────────────────────────────────
 
 export function HeroSection() {
-  const theme = useUIStore((s) => s.theme)
-  const dark = theme === 'dark'
+  const [nameComplete, setNameComplete] = useState(false)
+
+  useEffect(() => {
+    // delayChildren 1.0s + 13 stagger intervals × 0.06s + 150ms buffer
+    const ms = (1.0 + 13 * 0.06 + 0.15) * 1000
+    const id = setTimeout(() => setNameComplete(true), ms)
+    return () => clearTimeout(id)
+  }, [])
 
   return (
     <section
@@ -114,176 +78,217 @@ export function HeroSection() {
         position: 'relative',
         minHeight: '100vh',
         overflow: 'hidden',
+        backgroundColor: 'var(--bg)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
       }}
     >
-      {/* z:0 — 3D grid floor (bottom 60% of section) */}
-      <GridFloor dark={dark} />
-
-      {/* z:1 — Horizon glow line at grid/sky boundary */}
-      <HorizonLine dark={dark} />
-
-      {/*
-       * z:10 — Text content.
-       * Occupies top 60% of section (above horizon), content centered within.
-       * Text floats visually above the grid floor.
-       */}
-      <div
+      {/* Border rect — draws clockwise pathLength 0→1 over 1.5s */}
+      <svg
+        aria-hidden="true"
         style={{
           position: 'absolute',
-          top: 0,
-          bottom: '40%',
-          left: 0,
-          right: 0,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
+          top: 16,
+          left: 16,
+          width: 'calc(100% - 32px)',
+          height: 'calc(100% - 32px)',
+          pointerEvents: 'none',
+          zIndex: 1,
+          overflow: 'visible',
+        }}
+      >
+        <motion.rect
+          x="0.5"
+          y="0.5"
+          width="99%"
+          height="99%"
+          fill="none"
+          stroke="rgba(240,239,233,0.12)"
+          strokeWidth={1}
+          initial={{ pathLength: 0 }}
+          animate={{ pathLength: 1 }}
+          transition={{ duration: 1.5, ease: 'linear' as const }}
+        />
+      </svg>
+
+      {/* Corner dots — snap in at t=2.8s */}
+      {CORNERS.map((pos, i) => (
+        <motion.span
+          key={i}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0, delay: 2.8 }}
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            fontFamily: 'var(--font-mono)',
+            fontSize: '10px',
+            color: 'var(--muted)',
+            zIndex: 2,
+            lineHeight: 1,
+            ...pos,
+          }}
+        >
+          ·
+        </motion.span>
+      ))}
+
+      {/* Content stack */}
+      <div
+        style={{
+          position: 'relative',
           zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column' as const,
+          alignItems: 'center',
+          textAlign: 'center' as const,
           padding: '0 24px',
         }}
       >
-        {/* Status line */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5, duration: 0.4 }}
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: '0.7rem',
-            letterSpacing: '0.25em',
-            textTransform: 'uppercase' as const,
-            color: dark ? 'rgba(80,255,100,0.5)' : 'rgba(100,80,40,0.5)',
-            marginBottom: '2rem',
-          }}
-        >
-          &gt;_ SYSTEM ONLINE
-        </motion.p>
-
-        {/* Name — typewriter stagger via bootContainer */}
+        {/* Name — typewriter reveal */}
         <motion.h1
-          variants={bootContainer}
+          variants={heroNameContainer}
           initial="hidden"
           animate="visible"
           style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'clamp(2rem, 6vw, 4.5rem)',
-            fontWeight: 500,
-            letterSpacing: '0.2em',
+            fontFamily: 'var(--font-display)',
+            fontWeight: 800,
+            fontSize: 'clamp(40px, 8vw, 100px)',
             color: 'var(--fg)',
-            marginBottom: '1.25rem',
+            letterSpacing: '0.05em',
             lineHeight: 1,
-            textAlign: 'center' as const,
+            margin: 0,
+            marginBottom: '1.5rem',
+            display: 'flex',
+            alignItems: 'flex-end',
             whiteSpace: 'nowrap' as const,
           }}
         >
           {NAME_CHARS.map((char, i) => (
-            <motion.span
-              key={i}
-              variants={charReveal}
-              style={{
-                display: char === ' ' ? 'inline-block' : 'inline',
-                width: char === ' ' ? '0.5em' : 'auto',
-              }}
-            >
-              {char}
+            <motion.span key={i} variants={charReveal}>
+              {char === ' ' ? '\u00A0' : char}
             </motion.span>
           ))}
+          {!nameComplete && <BlinkingCursor />}
         </motion.h1>
 
-        {/* Role + blinking cursor */}
+        {/* Separator — scaleX left-to-right */}
+        <motion.div
+          initial={{ scaleX: 0 }}
+          animate={{ scaleX: 1 }}
+          transition={{ duration: 0.4, ease: 'linear' as const, delay: 2.0 }}
+          style={{
+            width: '100%',
+            maxWidth: '360px',
+            height: '1px',
+            backgroundColor: 'var(--muted)',
+            transformOrigin: 'left' as const,
+            marginBottom: '1.5rem',
+            opacity: 0.4,
+          }}
+        />
+
+        {/* Role */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ delay: 1.8, duration: 0.5 }}
+          transition={{ duration: 0.6, delay: 2.4 }}
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: 'clamp(0.75rem, 1.8vw, 1rem)',
+            fontSize: '0.65rem',
+            letterSpacing: '0.2em',
             color: 'var(--muted)',
-            letterSpacing: '0.08em',
+            textTransform: 'uppercase' as const,
+            margin: 0,
             marginBottom: '2.5rem',
-            textAlign: 'center' as const,
           }}
         >
-          Frontend Designer &amp; Developer
-          <motion.span
-            animate={{ opacity: [1, 1, 0, 0, 1] }}
-            transition={{
-              delay: 2.1,
-              duration: 0.8,
-              times: [0, 0.4, 0.5, 0.9, 1],
-              repeat: Infinity,
-              ease: 'linear' as const,
-            }}
-            style={{ marginLeft: '0.15em' }}
-          >
-            █
-          </motion.span>
+          DESIGNER / DEVELOPER
         </motion.p>
 
-        {/* CTAs — commented out while building theme
+        {/* CTAs */}
         <motion.div
-          variants={slideUp}
+          variants={ctaContainer}
           initial="hidden"
           animate="visible"
-          custom={2.4}
-          transition={{ delay: 2.4, duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' as const, justifyContent: 'center' }}
+          style={{
+            display: 'flex',
+            gap: '16px',
+            flexWrap: 'wrap' as const,
+            justifyContent: 'center' as const,
+          }}
         >
-          <MagneticButton>
-            <Button size="lg" onClick={() => scrollTo('work')}>
-              View Work
-            </Button>
-          </MagneticButton>
-          <MagneticButton>
-            <Button size="lg" variant="secondary" onClick={() => scrollTo('contact')}>
-              Get in Touch
-            </Button>
-          </MagneticButton>
+          {(['[ VIEW WORK ]', '[ CONTACT ]'] as const).map((label) => (
+            <motion.a
+              key={label}
+              href={label.includes('WORK') ? '#work' : '#contact'}
+              variants={fadeIn}
+              whileHover={{ y: -4 }}
+              onMouseEnter={(e) => {
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(240,239,233,0.4)'
+              }}
+              onMouseLeave={(e) => {
+                ;(e.currentTarget as HTMLElement).style.borderColor = 'rgba(240,239,233,0.15)'
+              }}
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: '0.6rem',
+                letterSpacing: '0.15em',
+                color: 'var(--fg)',
+                textDecoration: 'none',
+                border: '1px solid rgba(240,239,233,0.15)',
+                padding: '10px 20px',
+                display: 'inline-block',
+                cursor: 'pointer',
+                transition: 'border-color 0.15s',
+              }}
+            >
+              {label}
+            </motion.a>
+          ))}
         </motion.div>
-        */}
       </div>
 
-      {/*
-       * Scroll indicator.
-       * position:fixed inside CRTScreen (which has transform:perspective) =
-       * fixed relative to the screen wrapper (not the browser viewport).
-       * Anchors to the bottom of the visible CRT screen regardless of section height.
-       */}
+      {/* Scroll indicator — fixed to CRT screen bottom */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
-        transition={{ delay: 3.2, duration: 0.6 }}
+        transition={{ duration: 0.4, delay: 3.2 }}
         style={{
           position: 'fixed',
           bottom: '20px',
           left: '50%',
           transform: 'translateX(-50%)',
           zIndex: 10,
-          display: 'flex',
-          flexDirection: 'column' as const,
-          alignItems: 'center',
-          gap: '6px',
           pointerEvents: 'none',
         }}
       >
-        <span
+        <motion.span
+          animate={{ opacity: [1, 1, 0.15, 0.15] }}
+          transition={{
+            times: [0, 0.49, 0.5, 0.99],
+            repeat: Infinity,
+            duration: 0.8,
+            ease: 'linear' as const,
+            delay: 3.7,
+          }}
           style={{
             fontFamily: 'var(--font-mono)',
-            fontSize: '0.6rem',
-            letterSpacing: '0.2em',
-            textTransform: 'uppercase' as const,
+            fontSize: '6px',
+            letterSpacing: '0.15em',
             color: 'var(--muted)',
+            display: 'flex',
+            flexDirection: 'column' as const,
+            alignItems: 'center',
+            gap: '6px',
           }}
         >
-          Scroll
-        </span>
-        <motion.div
-          animate={{ y: [0, 6, 0] }}
-          transition={{ repeat: Infinity, duration: 1.6, ease: 'easeInOut' }}
-          style={{ color: 'var(--muted)' }}
-        >
-          <ArrowDown size={14} />
-        </motion.div>
+          <svg width="8" height="10" viewBox="0 0 8 10" shapeRendering="crispEdges" aria-hidden="true">
+            <path d="M3 0 H5 V6 H7 L4 10 L1 6 H3 Z" fill="currentColor" />
+          </svg>
+          SCROLL
+        </motion.span>
       </motion.div>
     </section>
   )

@@ -7,18 +7,25 @@ import { AboutSection } from '@/components/sections/AboutSection'
 // import { SkillsSection } from '@/components/sections/SkillsSection'
 // import { ContactSection } from '@/components/sections/ContactSection'
 import { useUIStore } from '@/store/uiStore'
+import { SwarmCanvas } from '@/components/swarm/SwarmCanvas'
 
 export function HomePage() {
   const introComplete = useUIStore((s) => s.introComplete)
   return (
-    <PageWrapper>
-      {!introComplete && <IntroAnimation />}
-      {introComplete && <CRTPowerOn />}
-      <HeroSection />
-      <AboutSection />
-      {/* <WorkSection />
-      <SkillsSection />
-      <ContactSection /> */}
-    </PageWrapper>
+    <>
+      {/* SwarmCanvas lives outside PageWrapper so position:absolute reaches the
+          screen wrapper's containing block without being intercepted by
+          PageWrapper's motion.div transform */}
+      {introComplete && <SwarmCanvas />}
+      <PageWrapper>
+        {!introComplete && <IntroAnimation />}
+        {introComplete && <CRTPowerOn />}
+        <HeroSection />
+        <AboutSection />
+        {/* <WorkSection />
+        <SkillsSection />
+        <ContactSection /> */}
+      </PageWrapper>
+    </>
   )
 }
