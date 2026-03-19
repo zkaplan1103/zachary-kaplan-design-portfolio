@@ -4,16 +4,23 @@ import { motion } from 'framer-motion'
 import { useUIStore } from '@/store/uiStore'
 import { BEZEL } from '@/config/bezel'
 
-// ─── ZK Grid Data ─────────────────────────────────────────────────────────────
+// ─── Grid scaling (nearest-neighbor) ─────────────────────────────────────────
 
-const CELL_SIZE = 26
-const ZK_ROWS = 18
-const ZK_COLS = 30
-const ZK_TOTAL_W = (ZK_COLS - 1) * CELL_SIZE  // 754px
-const ZK_TOTAL_H = (ZK_ROWS - 1) * CELL_SIZE  // 442px
+function scaleGrid(src: number[][], targetRows: number, targetCols: number): number[][] {
+  const srcRows = src.length
+  const srcCols = src[0].length
+  return Array.from({ length: targetRows }, (_, r) =>
+    Array.from({ length: targetCols }, (_, c) => {
+      const sr = Math.min(srcRows - 1, Math.round((r * (srcRows - 1)) / (targetRows - 1)))
+      const sc = Math.min(srcCols - 1, Math.round((c * (srcCols - 1)) / (targetCols - 1)))
+      return src[sr][sc]
+    })
+  )
+}
 
-// Z pixel art: 18 rows × 14 cols
-const Z_GRID: number[][] = [
+// ─── ZK Grid Data (source: 18 rows × 14 cols pixel art) ──────────────────────
+
+const Z_GRID_SRC: number[][] = [
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1], // Row 0  — top bar
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1], // Row 1
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1], // Row 2
@@ -34,8 +41,7 @@ const Z_GRID: number[][] = [
   [1,1,1,1,1,1,1,1,1,1,1,1,1,1], // Row 17
 ]
 
-// K pixel art: 18 rows × 14 cols
-const K_GRID: number[][] = [
+const K_GRID_SRC: number[][] = [
   [1,1,1,1,1, 0,0,0,0,0, 1,1,1,1], // Row 0
   [1,1,1,1,1, 0,0,0,0, 1,1,1,1,0], // Row 1
   [1,1,1,1,1, 0,0,0, 1,1,1,1,0,0], // Row 2
@@ -56,8 +62,15 @@ const K_GRID: number[][] = [
   [1,1,1,1,1, 0,0,0,0,0, 1,1,1,1], // Row 17
 ]
 
-// Combined: Z | 2-col gap | K → 30 cols total
-const ZK_GRID: number[][] = Z_GRID.map((zRow, r) => [...zRow, 0, 0, ...K_GRID[r]])
+// Scale to 52 rows: Z→42 cols, K→43 cols, gap=2 → 87 cols total
+const ZK_ROWS       = 52
+const Z_COLS_SCALED = 42
+const K_COLS_SCALED = 43
+const ZK_COLS       = Z_COLS_SCALED + 2 + K_COLS_SCALED  // 87
+
+const Z_GRID_SCALED = scaleGrid(Z_GRID_SRC, ZK_ROWS, Z_COLS_SCALED)
+const K_GRID_SCALED = scaleGrid(K_GRID_SRC, ZK_ROWS, K_COLS_SCALED)
+const ZK_GRID: number[][] = Z_GRID_SCALED.map((zRow, r) => [...zRow, 0, 0, ...K_GRID_SCALED[r]])
 
 // ─── Bezel screen rect ────────────────────────────────────────────────────────
 
@@ -74,45 +87,43 @@ function computeScreenRect(): ScreenRect {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
+const FONT_SIZE  = 7
+const CELL_SIZE  = 9
+const ZK_TOTAL_W = (ZK_COLS - 1) * CELL_SIZE   // 86 × 9 = 774
+const ZK_TOTAL_H = (ZK_ROWS - 1) * CELL_SIZE   // 51 × 9 = 459
+
 const CHARS = '0123456789!@#$%^&*()_-+=[]{}|;:,./<>?~`\'"\\abcdefghijklmnopqrstuvwxyz'
 
-// One particle per filled ZK cell — no stacking
 const PARTICLE_COUNT = ZK_GRID.reduce((sum, row) => sum + row.filter((v) => v === 1).length, 0)
 
-const GRAVITY = 0.3
+const GRAVITY     = 0.3
+const BOUNCE_SPEED = 0.9
 
-// FIX 2: bounce tuning for elegant drift + visible squish
-const BOUNCE_SPEED  = 1.5
-const SQUISH_FACTOR = 0.82
-const SQUISH_SPRING = 0.14
-
-// Hover warp — precise local push
 const WARP_RADIUS   = 55
 const WARP_STRENGTH = 50
 const WARP_SPRING   = 0.15
 
-// Lift
 const LIFT_STAGGER_MS = 15
 const LIFT_SPEED_MIN  = 3
 const LIFT_SPEED_MAX  = 7
+const LIFT_BATCH      = 100  // particles per stagger batch
 
-// Coalesce to bottom-left before snake forms
 const COALESCE_SPRING  = 0.05
 const COALESCE_DAMPING = 0.82
-const COALESCE_SCATTER = 30  // px scatter radius around coalesce point
+const COALESCE_SCATTER = 30
 
-// FIX 4: snake comet — circle arc geometry, per-frame path history
-const SNAKE_CELL         = 22   // grid cell size in px
-const SNAKE_MOVE_INTERVAL = 7   // frames between grid-cell advances
-const SNAKE_LERP         = 0.2  // smooth lerp toward grid target
-const HEAD_R             = 20   // px — head circle radius
-const PATH_HISTORY_LEN   = 60  // frames of head-position history (the comet tail)
-const SWARM_DISPLAY_MS   = 1500 // ms snake runs before slideUp
+const SNAKE_CELL          = 22
+const SNAKE_MOVE_INTERVAL = 7
+const SNAKE_LERP          = 0.2
+const HEAD_BASE_R         = 28
+const HEAD_BREATH_AMP     = 6
+const PATH_HISTORY_LEN    = 150
+const SWARM_DISPLAY_MS    = 1500
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// FIX 5: 'coalescing' phase added between lifting and swarm
-type Phase = 'screensaver' | 'exploding' | 'typing' | 'lifting' | 'coalescing' | 'swarm'
+type Phase   = 'screensaver' | 'exploding' | 'typing' | 'lifting' | 'coalescing' | 'swarm'
+type HitWall = 'left' | 'right' | 'top' | 'bottom' | null
 
 interface Particle {
   x: number; y: number; vx: number; vy: number
@@ -124,6 +135,50 @@ interface Particle {
   zkOffX: number; zkOffY: number
   targetX: number; targetY: number
   displX: number; displY: number
+}
+
+interface CometParticle {
+  baseAngle: number   // head: orbital base angle
+  baseR: number       // head: orbit radius (scaled by HEAD_BASE_R)
+  opacity: number
+  char: string
+  histIdx: number     // tail: index into pathHistoryRef
+  jitterX: number     // tail: static x offset from path position
+  jitterY: number     // tail: static y offset from path position
+  isHead: boolean
+}
+
+// ─── Comet factory (pure — no React deps) ────────────────────────────────────
+
+function createCometParticles(): CometParticle[] {
+  const ps: CometParticle[] = []
+  // 60 head particles — tight breathing orbit
+  for (let i = 0; i < 60; i++) {
+    const baseAngle = (i / 60) * Math.PI * 2 + Math.random() * 0.4
+    const baseR     = HEAD_BASE_R * (0.3 + Math.random() * 0.7)
+    ps.push({
+      baseAngle, baseR,
+      opacity: 0.85 + Math.random() * 0.15,
+      char: CHARS[Math.floor(Math.random() * CHARS.length)],
+      histIdx: 0, jitterX: 0, jitterY: 0,
+      isHead: true,
+    })
+  }
+  // 220 tail particles — sample path history at varying depths
+  for (let i = 0; i < 220; i++) {
+    const t      = i / 220
+    const spread = 4 + t * 22
+    ps.push({
+      baseAngle: 0, baseR: 0,
+      opacity: 0.7 * Math.pow(1 - t, 1.4),
+      char: CHARS[Math.floor(Math.random() * CHARS.length)],
+      histIdx: Math.floor(t * (PATH_HISTORY_LEN - 1)),
+      jitterX: (Math.random() - 0.5) * spread,
+      jitterY: (Math.random() - 0.5) * spread,
+      isHead: false,
+    })
+  }
+  return ps
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -140,36 +195,37 @@ export function IntroAnimation() {
   const mouseRef       = useRef({ x: -9999, y: -9999 })
   const rafRef         = useRef<number>(0)
   const themeRef       = useRef(theme)
-  const userClickedRef = useRef<boolean>(false)  // PATH A flag
+  const userClickedRef = useRef<boolean>(false)
 
-  // FIX 1: bezel screen rect — canvas is sized to this, not full viewport
   const screenRectRef = useRef<ScreenRect>(computeScreenRect())
   const [screenDims, setScreenDims] = useState<ScreenRect>(() => computeScreenRect())
 
   // Screensaver bounce — canvas-local coords (0,0 = bezel screen top-left)
-  const bouncePosRef = useRef({ x: 0, y: 0 })
-  const bounceVelRef = useRef({ vx: BOUNCE_SPEED, vy: BOUNCE_SPEED * 0.75 })
-  const squishRef    = useRef({ x: 1, y: 1 })
+  const bouncePosRef    = useRef({ x: 0, y: 0 })
+  const bounceVelRef    = useRef({ vx: BOUNCE_SPEED, vy: BOUNCE_SPEED * 0.75 })
+  const hitWallRef      = useRef<HitWall>(null)
+  const deformAmountRef = useRef(0)
 
-  // FIX 4: snake comet — smooth head + per-frame path history (viewport coords)
-  const snakeHeadPxRef    = useRef({ x: 0, y: 0 })   // smooth canvas-local head position
-  const snakeTargetRef    = useRef({ x: 0, y: 0 })   // current grid-cell target (canvas-local)
-  const snakeDirRef       = useRef({ dx: 1, dy: 0 })  // current grid direction
-  const snakeMoveTimerRef = useRef(0)
-  const pathHistoryRef    = useRef<{ x: number; y: number }[]>([])  // viewport coords
-  const snakeHeadCharsRef = useRef<string[]>([])       // 8 chars flickering inside head
-  const snakeActiveRef    = useRef(false)
+  // Snake comet
+  const snakeHeadPxRef     = useRef({ x: 0, y: 0 })
+  const snakeTargetRef     = useRef({ x: 0, y: 0 })
+  const snakeDirRef        = useRef({ dx: 1, dy: 0 })
+  const snakeMoveTimerRef  = useRef(0)
+  const pathHistoryRef     = useRef<{ x: number; y: number }[]>([])
+  const snakeActiveRef     = useRef(false)
+  const snakeBridgeModeRef = useRef(false)
+  const cometPsRef         = useRef<CometParticle[]>([])
+  const breathPhaseRef     = useRef(0)
 
-  const [showTyping,  setShowTyping]  = useState(false)
-  const [typedText,   setTypedText]   = useState('')
-  const [showBlink,   setShowBlink]   = useState(true)
-  const [introExiting, setIntroExiting] = useState(false)  // PATH A slideUp
+  const [showTyping,   setShowTyping]   = useState(false)
+  const [typedText,    setTypedText]    = useState('')
+  const [showBlink,    setShowBlink]    = useState(true)
+  const [introExiting, setIntroExiting] = useState(false)
 
   useEffect(() => { themeRef.current = theme }, [theme])
 
-  // ── Particle init ─────────────────────────────────────────────────────────
-  // sw/sh are canvas dimensions = bezel screen px size
-  // (0,0) in particle space = bezel screen top-left
+  // ── Particle init ──────────────────────────────────────────────────────────
+  // All coords canvas-local: (0,0) = bezel screen top-left, (sw,sh) = bottom-right
 
   function initParticles(sw: number, sh: number) {
     const cx = sw / 2
@@ -206,16 +262,16 @@ export function IntroAnimation() {
     }
     particlesRef.current = ps
 
-    // Bounce starts at canvas center (= bezel screen center, canvas-local)
     bouncePosRef.current = { x: cx, y: cy }
     bounceVelRef.current = {
       vx: BOUNCE_SPEED * (Math.random() < 0.5 ? 1 : -1),
       vy: BOUNCE_SPEED * 0.75 * (Math.random() < 0.5 ? 1 : -1),
     }
-    squishRef.current = { x: 1, y: 1 }
+    hitWallRef.current      = null
+    deformAmountRef.current = 0
   }
 
-  // ── Lift sequence ─────────────────────────────────────────────────────────
+  // ── Lift sequence ──────────────────────────────────────────────────────────
 
   function startLift() {
     const canvas = canvasRef.current
@@ -230,7 +286,7 @@ export function IntroAnimation() {
       .sort((a, b) => Math.hypot(b.x - cx, b.y - cy) - Math.hypot(a.x - cx, a.y - cy))
 
     toLift.forEach((p, i) => {
-      const delay = Math.floor(i / 10) * LIFT_STAGGER_MS
+      const delay = Math.floor(i / LIFT_BATCH) * LIFT_STAGGER_MS
       setTimeout(() => {
         p.settled = false
         p.vy = -(LIFT_SPEED_MIN + Math.random() * (LIFT_SPEED_MAX - LIFT_SPEED_MIN))
@@ -240,18 +296,18 @@ export function IntroAnimation() {
       }, delay)
     })
 
-    const liftDuration = Math.ceil(toLift.length / 10) * LIFT_STAGGER_MS + 800
+    const liftDuration = Math.ceil(toLift.length / LIFT_BATCH) * LIFT_STAGGER_MS + 800
     setTimeout(startCoalesce, liftDuration)
   }
 
-  // ── Coalesce: particles spring to bottom-left before snake forms ──────────
+  // ── Coalesce ───────────────────────────────────────────────────────────────
 
   function startCoalesce() {
     phaseRef.current = 'coalescing'
     setTimeout(startSwarm, 600)
   }
 
-  // ── Swarm: snake activates ────────────────────────────────────────────────
+  // ── Swarm ──────────────────────────────────────────────────────────────────
 
   function startSwarm() {
     const canvas = canvasRef.current
@@ -262,38 +318,37 @@ export function IntroAnimation() {
     const sh = canvas.height
     const { sl, st } = screenRectRef.current
 
-    // Snake head starts at canvas-local bottom-left (15%, 85%)
     const startX = sw * 0.15
     const startY = sh * 0.85
 
-    snakeHeadPxRef.current    = { x: startX, y: startY }
-    snakeTargetRef.current    = { x: startX, y: startY }
-    snakeDirRef.current       = { dx: 1, dy: 0 }
-    snakeMoveTimerRef.current = 0
-    snakeActiveRef.current    = true
+    snakeHeadPxRef.current     = { x: startX, y: startY }
+    snakeTargetRef.current     = { x: startX, y: startY }
+    snakeDirRef.current        = { dx: 1, dy: 0 }
+    snakeMoveTimerRef.current  = 0
+    snakeActiveRef.current     = true
+    snakeBridgeModeRef.current = false
+    breathPhaseRef.current     = 0
 
-    // Seed full path history at start position (viewport coords for portal canvas)
     pathHistoryRef.current = Array.from({ length: PATH_HISTORY_LEN }, () => ({
       x: startX + sl,
       y: startY + st,
     }))
 
-    // 8 chars that flicker inside the head circle
-    snakeHeadCharsRef.current = Array.from({ length: 8 }, () =>
-      CHARS[Math.floor(Math.random() * CHARS.length)]
-    )
+    cometPsRef.current = createCometParticles()
 
-    // PATH A: slideUp after display time
-    setTimeout(() => { setIntroExiting(true) }, SWARM_DISPLAY_MS)
+    // PATH A: bridge toward top + slideUp after display time
+    setTimeout(() => {
+      snakeBridgeModeRef.current = true
+      setIntroExiting(true)
+    }, SWARM_DISPLAY_MS)
   }
 
-  // ── RAF loop ─────────────────────────────────────────────────────────────
+  // ── RAF loop ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // FIX 1: canvas sized to exact bezel screen area — NOT full viewport
     function resize() {
       if (!canvas) return
       const rect = computeScreenRect()
@@ -308,7 +363,6 @@ export function IntroAnimation() {
         swarmCanvasRef.current.height = window.innerHeight
       }
 
-      // Re-center bounce when window resizes
       if (phaseRef.current === 'screensaver') {
         bouncePosRef.current = { x: rect.sw / 2, y: rect.sh / 2 }
       }
@@ -320,52 +374,58 @@ export function IntroAnimation() {
     phaseRef.current = 'screensaver'
 
     const ctx = canvas.getContext('2d')!
+    ctx.imageSmoothingEnabled = false
 
     function loop() {
       if (!canvas) return
-      // FIX 1: w/h are now bezel screen px dimensions (not viewport)
-      const w     = canvas.width
-      const h     = canvas.height
-      const phase = phaseRef.current
-      const mouse = mouseRef.current
+      const w         = canvas.width
+      const h         = canvas.height
+      const phase     = phaseRef.current
+      const mouse     = mouseRef.current
       const particles = particlesRef.current
-      const now   = Date.now()
+      const now       = Date.now()
+      const isDark    = themeRef.current === 'dark'
+      const pcColor   = isDark ? '#f0efe9' : '#0a0a0a'
 
-      const isDark  = themeRef.current === 'dark'
-      const bgColor = isDark ? '#000000' : '#ffffff'
-      const pcColor = isDark ? '#ffffff' : '#000000'
-
-      // Fills only the bezel screen area (canvas IS the bezel screen)
-      ctx.fillStyle = bgColor
-      ctx.fillRect(0, 0, w, h)
-      ctx.font = '14px "Courier New", monospace'
+      // Fix 1: transparent canvas — section CSS bg provides background color
+      ctx.clearRect(0, 0, w, h)
+      ctx.font = `${FONT_SIZE}px "IBM Plex Mono", monospace`
 
       if (phase === 'screensaver') {
         const bp = bouncePosRef.current
         const bv = bounceVelRef.current
-        const sq = squishRef.current
         bp.x += bv.vx
         bp.y += bv.vy
 
-        // FIX 2: half-dims use squish multiplier → ZK never clips wall
-        const halfW = (ZK_TOTAL_W / 2) * sq.x + 4  // +4 inset buffer
-        const halfH = (ZK_TOTAL_H / 2) * sq.y + 4
+        // Fix 3: fixed half-dims — no squish, just inset buffer
+        const halfW = ZK_TOTAL_W / 2 + 4
+        const halfH = ZK_TOTAL_H / 2 + 4
 
-        // FIX 1+2: walls are canvas edges — no bezelL/R/T/B needed
-        if (bp.x - halfW < 0) { bv.vx =  Math.abs(bv.vx); bp.x = halfW;     sq.x = SQUISH_FACTOR }
-        if (bp.x + halfW > w) { bv.vx = -Math.abs(bv.vx); bp.x = w - halfW; sq.x = SQUISH_FACTOR }
-        if (bp.y - halfH < 0) { bv.vy =  Math.abs(bv.vy); bp.y = halfH;     sq.y = SQUISH_FACTOR }
-        if (bp.y + halfH > h) { bv.vy = -Math.abs(bv.vy); bp.y = h - halfH; sq.y = SQUISH_FACTOR }
+        if (bp.x - halfW < 0) { bv.vx =  Math.abs(bv.vx); bp.x = halfW;     hitWallRef.current = 'left';   deformAmountRef.current = 0.35 }
+        if (bp.x + halfW > w) { bv.vx = -Math.abs(bv.vx); bp.x = w - halfW; hitWallRef.current = 'right';  deformAmountRef.current = 0.35 }
+        if (bp.y - halfH < 0) { bv.vy =  Math.abs(bv.vy); bp.y = halfH;     hitWallRef.current = 'top';    deformAmountRef.current = 0.35 }
+        if (bp.y + halfH > h) { bv.vy = -Math.abs(bv.vy); bp.y = h - halfH; hitWallRef.current = 'bottom'; deformAmountRef.current = 0.35 }
 
-        sq.x += (1 - sq.x) * SQUISH_SPRING
-        sq.y += (1 - sq.y) * SQUISH_SPRING
+        const da = deformAmountRef.current
+        deformAmountRef.current *= 0.88
+        const hw = hitWallRef.current
 
         for (const p of particles) {
           p.displX *= (1 - WARP_SPRING)
           p.displY *= (1 - WARP_SPRING)
 
-          const baseX = bp.x + p.zkOffX * sq.x
-          const baseY = bp.y + p.zkOffY * sq.y
+          // Fix 3: spatial deformation — side nearest the hit wall compresses inward
+          const normX = p.zkOffX / (ZK_TOTAL_W / 2)
+          const normY = p.zkOffY / (ZK_TOTAL_H / 2)
+          let deformOffX = p.zkOffX
+          let deformOffY = p.zkOffY
+          if (hw === 'left')   deformOffX = p.zkOffX * (1 - da * Math.max(0, -normX))
+          if (hw === 'right')  deformOffX = p.zkOffX * (1 - da * Math.max(0,  normX))
+          if (hw === 'top')    deformOffY = p.zkOffY * (1 - da * Math.max(0, -normY))
+          if (hw === 'bottom') deformOffY = p.zkOffY * (1 - da * Math.max(0,  normY))
+
+          const baseX = bp.x + deformOffX
+          const baseY = bp.y + deformOffY
 
           const cdx   = baseX - mouse.x
           const cdy   = baseY - mouse.y
@@ -387,7 +447,7 @@ export function IntroAnimation() {
         }
 
       } else if (phase === 'exploding' || phase === 'typing') {
-        const floorY = h  // floor = bottom of bezel screen (canvas-local)
+        const floorY = h
         for (const p of particles) {
           if (!p.settled) {
             p.vy += GRAVITY
@@ -408,7 +468,7 @@ export function IntroAnimation() {
         for (const p of particles) {
           if (!p.settled) {
             p.vx *= 0.98; p.vy *= 0.98
-            p.x += p.vx;  p.y += p.vy
+            p.x  += p.vx; p.y  += p.vy
           } else {
             p.opacity *= 0.97
           }
@@ -416,7 +476,6 @@ export function IntroAnimation() {
         }
 
       } else if (phase === 'coalescing') {
-        // FIX 5: spring all particles toward bottom-left cluster point
         for (const p of particles) {
           if (p.opacity < 0.01) continue
           const tx = w * 0.15 + Math.cos(p.flickerOffset) * COALESCE_SCATTER
@@ -425,144 +484,141 @@ export function IntroAnimation() {
           p.vy += (ty - p.y) * COALESCE_SPRING
           p.vx *= COALESCE_DAMPING
           p.vy *= COALESCE_DAMPING
-          p.x += p.vx
-          p.y += p.vy
+          p.x  += p.vx
+          p.y  += p.vy
           p.opacity += (0.6 - p.opacity) * 0.05
         }
 
       } else if (phase === 'swarm') {
-        // Background particles coast and fade
         for (const p of particles) {
           p.opacity *= 0.96
           p.x += p.vx * 0.92
           p.y += p.vy * 0.92
         }
 
-        // FIX 4: snake grid movement — advance head target every SNAKE_MOVE_INTERVAL frames
-        snakeMoveTimerRef.current++
-        if (snakeMoveTimerRef.current >= SNAKE_MOVE_INTERVAL) {
-          snakeMoveTimerRef.current = 0
-          const dir = snakeDirRef.current
+        if (snakeBridgeModeRef.current) {
+          // Fix 5: bridge — steer head toward top of canvas (hero area after slideUp)
+          snakeTargetRef.current = { x: snakeTargetRef.current.x, y: h * 0.1 }
+        } else {
+          snakeMoveTimerRef.current++
+          if (snakeMoveTimerRef.current >= SNAKE_MOVE_INTERVAL) {
+            snakeMoveTimerRef.current = 0
+            const dir = snakeDirRef.current
 
-          // 25% chance to turn — no 180° reversals
-          if (Math.random() < 0.25) {
-            const dirs = [
-              { dx:  1, dy:  0 }, { dx: -1, dy:  0 },
-              { dx:  0, dy:  1 }, { dx:  0, dy: -1 },
-            ].filter((d) => !(d.dx === -dir.dx && d.dy === -dir.dy))
-            snakeDirRef.current = dirs[Math.floor(Math.random() * dirs.length)]
+            if (Math.random() < 0.25) {
+              const dirs = [
+                { dx:  1, dy:  0 }, { dx: -1, dy:  0 },
+                { dx:  0, dy:  1 }, { dx:  0, dy: -1 },
+              ].filter((d) => !(d.dx === -dir.dx && d.dy === -dir.dy))
+              snakeDirRef.current = dirs[Math.floor(Math.random() * dirs.length)]
+            }
+
+            const buf  = HEAD_BASE_R + 4
+            const newX = Math.max(buf, Math.min(w - buf, snakeTargetRef.current.x + snakeDirRef.current.dx * SNAKE_CELL))
+            const newY = Math.max(buf, Math.min(h - buf, snakeTargetRef.current.y + snakeDirRef.current.dy * SNAKE_CELL))
+            snakeTargetRef.current = { x: newX, y: newY }
           }
-
-          const buf  = HEAD_R + 4
-          const newX = Math.max(buf, Math.min(w - buf, snakeTargetRef.current.x + snakeDirRef.current.dx * SNAKE_CELL))
-          const newY = Math.max(buf, Math.min(h - buf, snakeTargetRef.current.y + snakeDirRef.current.dy * SNAKE_CELL))
-          snakeTargetRef.current = { x: newX, y: newY }
         }
 
-        // Smooth lerp head toward current grid target (canvas-local)
         const head = snakeHeadPxRef.current
         head.x += (snakeTargetRef.current.x - head.x) * SNAKE_LERP
         head.y += (snakeTargetRef.current.y - head.y) * SNAKE_LERP
 
-        // Record head in path history — viewport coords (portal canvas is full viewport)
         const { sl, st } = screenRectRef.current
         const hist = pathHistoryRef.current
         hist.unshift({ x: head.x + sl, y: head.y + st })
         if (hist.length > PATH_HISTORY_LEN) hist.pop()
 
-        // Occasionally flicker one head char
-        if (Math.random() < 0.12) {
-          const idx = Math.floor(Math.random() * snakeHeadCharsRef.current.length)
-          snakeHeadCharsRef.current[idx] = CHARS[Math.floor(Math.random() * CHARS.length)]
-        }
+        breathPhaseRef.current += 0.028
       }
 
-      // ── Draw ZK particles on main canvas ──────────────────────────────────
-      ctx.font = '14px "Courier New", monospace'
+      // ── Draw ZK particles on main canvas (fillText only) ─────────────────
+      ctx.textAlign    = 'center'
+      ctx.textBaseline = 'middle'
       for (const p of particles) {
         if (p.opacity < 0.01) continue
         ctx.globalAlpha = Math.max(0, Math.min(1, p.opacity))
         ctx.fillStyle   = pcColor
         ctx.fillText(p.char, p.x, p.y)
       }
-      ctx.globalAlpha = 1
+      ctx.globalAlpha  = 1
+      ctx.textAlign    = 'left'
+      ctx.textBaseline = 'alphabetic'
 
-      // ── Portal canvas: comet snake (Path A) + scroll trail (Path B) ───────
+      // ── Portal canvas: character comet (Path A) + scroll comet (Path B) ──
       const sc = swarmCanvasRef.current?.getContext('2d')
       if (sc && swarmCanvasRef.current) {
         const vw = swarmCanvasRef.current.width
         const vh = swarmCanvasRef.current.height
         sc.clearRect(0, 0, vw, vh)
+        sc.font          = `${FONT_SIZE}px "IBM Plex Mono", monospace`
+        sc.textAlign     = 'center'
+        sc.textBaseline  = 'middle'
 
-        const dotRgb  = isDark ? '240,239,233' : '10,10,10'
-        const headFill = isDark ? 'rgba(240,239,233,0.95)' : 'rgba(10,10,10,0.95)'
-        const charFill = isDark ? 'rgba(10,10,10,0.7)' : 'rgba(240,239,233,0.7)'
+        const portalColor = isDark ? '#f0efe9' : '#0a0a0a'
 
         if (phase === 'swarm' && snakeActiveRef.current) {
-          // FIX 4: comet — draw trail tail→head so head renders on top
+          // Fix 4: pure character comet — NO arc() calls
           const hist = pathHistoryRef.current
-          for (let i = hist.length - 1; i >= 1; i--) {
-            const t = 1 - i / hist.length  // 0 at tail tip, ~1 near head
-            const r = Math.max(1, HEAD_R * t)
-            const a = 0.9 * t
-            sc.beginPath()
-            sc.arc(hist[i].x, hist[i].y, r, 0, Math.PI * 2)
-            sc.fillStyle = `rgba(${dotRgb},${a.toFixed(2)})`
-            sc.fill()
-          }
-
           if (hist.length > 0) {
             const hd = hist[0]
+            const bp = breathPhaseRef.current
 
-            // Head circle — bright solid ball
-            sc.beginPath()
-            sc.arc(hd.x, hd.y, HEAD_R, 0, Math.PI * 2)
-            sc.fillStyle = headFill
-            sc.fill()
+            for (const cp of cometPsRef.current) {
+              if (cp.opacity < 0.01) continue
 
-            // 8 flickering chars inside head circle
-            sc.font = '11px "IBM Plex Mono", monospace'
-            sc.textBaseline = 'middle'
-            sc.textAlign    = 'center'
-            const chars = snakeHeadCharsRef.current
-            for (let i = 0; i < chars.length; i++) {
-              const angle = (i / chars.length) * Math.PI * 2
-              sc.fillStyle = charFill
-              sc.fillText(chars[i], hd.x + Math.cos(angle) * 8, hd.y + Math.sin(angle) * 8)
+              if (Math.random() < 0.006) {
+                cp.char = CHARS[Math.floor(Math.random() * CHARS.length)]
+              }
+
+              if (cp.isHead) {
+                const breath = HEAD_BASE_R + HEAD_BREATH_AMP * Math.sin(bp + cp.baseAngle * 0.5)
+                const angle  = cp.baseAngle + bp * 0.15
+                const px = hd.x + Math.cos(angle) * (cp.baseR / HEAD_BASE_R) * breath
+                const py = hd.y + Math.sin(angle) * (cp.baseR / HEAD_BASE_R) * breath
+                sc.globalAlpha = cp.opacity
+                sc.fillStyle   = portalColor
+                sc.fillText(cp.char, px, py)
+              } else {
+                if (cp.histIdx >= hist.length) continue
+                const pos = hist[cp.histIdx]
+                sc.globalAlpha = cp.opacity
+                sc.fillStyle   = portalColor
+                sc.fillText(cp.char, pos.x + cp.jitterX, pos.y + cp.jitterY)
+              }
             }
-            sc.textBaseline = 'alphabetic'
-            sc.textAlign    = 'left'
           }
 
         } else if (phase === 'screensaver') {
-          // FIX 6: PATH B — scroll-driven comet trailing from viewport top downward
+          // Fix 4 / Path B: scroll-driven comet — fillText only, no arc()
           const { sl, st, sw: sw2, sh: sh2 } = screenRectRef.current
           const sectionEl = canvasRef.current?.parentElement
           if (sectionEl) {
-            const sRect    = sectionEl.getBoundingClientRect()
-            // scrollProg: 0 = intro at rest, 1 = fully scrolled past
+            const sRect      = sectionEl.getBoundingClientRect()
             const scrollProg = Math.max(0, Math.min(1, (st - sRect.top) / sh2))
-
             if (scrollProg > 0.03) {
               const hx    = sl + sw2 * 0.2
-              const headY = scrollProg * sh2 * 0.3  // head moves from y=0 to 30% of sh
-
+              const headY = scrollProg * sh2 * 0.3
               const STEPS = 80
               for (let i = 0; i <= STEPS; i++) {
-                const t  = i / STEPS   // 0=tail(top of viewport), 1=head
-                const py = t * headY
-                const r  = Math.max(1, HEAD_R * t)
-                const a  = 0.85 * t * Math.min(1, scrollProg * 2)
-                sc.beginPath()
-                sc.arc(hx, py, r, 0, Math.PI * 2)
-                sc.fillStyle = `rgba(${dotRgb},${a.toFixed(2)})`
-                sc.fill()
+                const t = i / STEPS
+                const a = 0.85 * t * Math.min(1, scrollProg * 2)
+                if (a < 0.01) continue
+                sc.globalAlpha = a
+                sc.fillStyle   = portalColor
+                sc.fillText(
+                  CHARS[Math.floor(Math.random() * CHARS.length)],
+                  hx + (Math.random() - 0.5) * 4,
+                  t * headY
+                )
               }
             }
           }
         }
 
-        sc.globalAlpha = 1
+        sc.globalAlpha   = 1
+        sc.textAlign     = 'left'
+        sc.textBaseline  = 'alphabetic'
       }
 
       rafRef.current = requestAnimationFrame(loop)
@@ -576,14 +632,13 @@ export function IntroAnimation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // ── Event handlers ────────────────────────────────────────────────────────
+  // ── Event handlers ─────────────────────────────────────────────────────────
 
   useEffect(() => {
     function onMouseMove(e: MouseEvent) {
       const canvas = canvasRef.current
       if (!canvas) return
       const rect = canvas.getBoundingClientRect()
-      // Canvas is bezel-screen-sized — convert viewport coords to canvas-local
       mouseRef.current = {
         x: (e.clientX - rect.left) * (canvas.width  / rect.width),
         y: (e.clientY - rect.top)  * (canvas.height / rect.height),
@@ -592,7 +647,7 @@ export function IntroAnimation() {
 
     function onClick() {
       if (phaseRef.current !== 'screensaver') return
-      userClickedRef.current = true  // PATH A
+      userClickedRef.current = true
 
       for (const p of particlesRef.current) { p.displX = 0; p.displY = 0 }
 
@@ -621,7 +676,7 @@ export function IntroAnimation() {
     }
   }, [])
 
-  // ── Typing sequence ───────────────────────────────────────────────────────
+  // ── Typing sequence ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!showTyping) return
@@ -639,7 +694,7 @@ export function IntroAnimation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showTyping])
 
-  // ── Blinking cursor ───────────────────────────────────────────────────────
+  // ── Blinking cursor ────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!showTyping) return
@@ -647,7 +702,7 @@ export function IntroAnimation() {
     return () => clearInterval(bid)
   }, [showTyping])
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  // ─── Render ────────────────────────────────────────────────────────────────
 
   const particleColor = theme === 'dark' ? '#ffffff' : '#000000'
   const bgClass       = theme === 'dark' ? 'bg-black' : 'bg-white'
@@ -655,7 +710,7 @@ export function IntroAnimation() {
 
   return (
     <>
-      {/* Portal canvas: full viewport, in document.body — survives slideUp of intro section */}
+      {/* Portal canvas: full viewport, document.body — survives intro slideUp */}
       {createPortal(
         <canvas
           ref={swarmCanvasRef}
@@ -665,8 +720,6 @@ export function IntroAnimation() {
         document.body
       )}
 
-      {/* FIX 1: section is exactly bezel screen size (sw × sh) — not 100vh.
-          FIX 5: slideUp by full section height → complete off-screen exit. */}
       <motion.section
         className={`relative overflow-hidden select-none ${bgClass}`}
         style={{
