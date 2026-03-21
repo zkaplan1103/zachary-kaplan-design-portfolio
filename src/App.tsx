@@ -10,27 +10,6 @@ export default function App() {
 
   return (
     <>
-      {/* ── SVG noise filter definition (zero visual footprint) ── */}
-      {/* Referenced by the grain overlay inside CRTScreen via filter:url(#crt-noise) */}
-      <svg
-        aria-hidden="true"
-        style={{ position: 'fixed', width: 0, height: 0, overflow: 'hidden' }}
-      >
-        <defs>
-          <filter id="crt-noise" x="0%" y="0%" width="100%" height="100%"
-            colorInterpolationFilters="sRGB">
-            <feTurbulence
-              type="fractalNoise"
-              baseFrequency="0.65"
-              numOctaves="3"
-              stitchTiles="stitch"
-              result="noise"
-            />
-            <feColorMatrix type="saturate" values="0" />
-          </filter>
-        </defs>
-      </svg>
-
       {/*
        * CRTScreen manages:
        *   - Monitor PNG at z:100 (object-fit:contain, covers full viewport)

@@ -27,7 +27,7 @@ interface CRTScreenProps {
  *   - All CRT effects layered inside the screen wrapper as absolute overlays
  *
  * z-order inside screen wrapper:
- *   children (content)  →  grain (z:2)  →  scanlines (z:3)  →
+ *   children (content)  →  scanlines (z:3)  →
  *   phosphor (z:4)      →  vignette (z:5)
  */
 export function CRTScreen({ children, dark }: CRTScreenProps) {
@@ -108,22 +108,6 @@ export function CRTScreen({ children, dark }: CRTScreenProps) {
       >
         {/* Site content */}
         {children}
-
-        {/* z:2 — Grain (drifting SVG noise) — oversized so drift never exposes edge */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: '-15%', left: '-15%', right: '-15%', bottom: '-15%',
-            zIndex: 2,
-            opacity: dark ? 0.045 : 0.025,
-            filter: 'url(#crt-noise)',
-            background: 'white',
-            willChange: 'transform',
-            animation: 'crt-grain-drift 12s linear infinite',
-            pointerEvents: 'none',
-          }}
-        />
 
         {/* z:3 — Scanlines */}
         <div
