@@ -3,7 +3,11 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { useUIStore } from '@/store/uiStore'
 import { BEZEL } from '@/config/bezel'
-import { createDragon, updateDragon, getSpinePointAt, BODY_SPINE_START } from '@/components/swarm/dragonEngine'
+import {
+  CELL_W, CELL_H, BODY_LENGTH, SPINE_SAMPLES,
+  spinePos, spineTangent, ribRadius,
+  charForDist, bodyOpacity, lightChance, headCell, cellSeed,
+} from '@/components/swarm/dragonEngine'
 
 // ─── Programmatic grid generation (smooth diagonals via interpolation) ───────
 
@@ -131,209 +135,10 @@ const WARP_RADIUS   = 55
 const WARP_STRENGTH = 50
 const WARP_SPRING   = 0.15
 
-// ─── Dragon — Path B scroll creature ─────────────────────────────────────────
-// Head faces DOWN (direction of travel). Body trails UPWARD behind.
-// +dy = down on screen. Body uses spine-relative coords, rendered at runtime.
-
-// Eye socket void test — diamond shape in head-local coords
-function isInEyeSocket(dx: number, dy: number): boolean {
-  const sA = 11, sB = 7, tilt = 0.25
-  // Left socket center (-18, -28)
-  const ltx = dx + 18, lty = dy + 28
-  const lrx = ltx * Math.cos(tilt) + lty * Math.sin(tilt)
-  const lry = -ltx * Math.sin(tilt) + lty * Math.cos(tilt)
-  if (Math.abs(lrx) / sA + Math.abs(lry) / sB <= 1) return true
-  // Right socket center (+18, -28), mirrored tilt
-  const rtx = dx - 18, rty = dy + 28
-  const rrx = rtx * Math.cos(tilt) - rty * Math.sin(tilt)
-  const rry = rtx * Math.sin(tilt) + rty * Math.cos(tilt)
-  if (Math.abs(rrx) / sA + Math.abs(rry) / sB <= 1) return true
-  return false
-}
-
-interface DragonPart {
-  isHead: boolean
-  // Head: absolute px offsets from head center
-  dx: number
-  dy: number
-  // Body: spine-relative (rendered at runtime from FABRIK spine chain)
-  spineT: number       // 0 = near head, 1 = far tail
-  perpOffset: number   // px perpendicular from spine
-  // Shared
-  a: number
-  char: string
-  jitterPhase: number
-  jitterAmpX: number
-  jitterAmpY: number
-  jitterSpeed: number
-  lightTimer: number   // frames remaining "lit" (mutable per frame)
-  lightChance: number  // probability per frame of igniting
-}
-
-const DRAGON: DragonPart[] = []
-
-function rnd() { return Math.random() }
-function randChar() { return CHARS[Math.floor(rnd() * CHARS.length)] }
-function jp(ampScale = 1) {
-  return {
-    jitterPhase: rnd() * Math.PI * 2,
-    jitterAmpX:  (0.5 + rnd() * 2.5) * ampScale,
-    jitterAmpY:  (0.3 + rnd() * 1.5) * ampScale,
-    jitterSpeed: 1.0 + rnd() * 3.0,
-  }
-}
-function hp(dx: number, dy: number, a: number, lc: number, jAmp = 1): DragonPart {
-  return { isHead: true, dx, dy, spineT: 0, perpOffset: 0, a, char: randChar(), ...jp(jAmp), lightTimer: 0, lightChance: lc }
-}
-function bp(spineT: number, perpOffset: number, a: number, lc: number, jAmp = 1): DragonPart {
-  return { isHead: false, dx: 0, dy: 0, spineT, perpOffset, a, char: randChar(), ...jp(jAmp), lightTimer: 0, lightChance: lc }
-}
-
-// ── DRAGON HEAD — faces DOWN, ~280 particles ─────────────────────────────────
-
-// Skull: large oval mass — eye socket voids excluded via rejection sampling
-for (let i = 0; i < 130; i++) {
-  let dx = 0, dy = 0, attempts = 0
-  do {
-    const angle = rnd() * Math.PI * 2
-    const r = Math.sqrt(rnd())
-    dx = Math.cos(angle) * r * 44
-    dy = -18 + Math.sin(angle) * r * 32
-    attempts++
-  } while (isInEyeSocket(dx, dy) && attempts < 50)
-  DRAGON.push(hp(dx, dy, 0.80 + rnd() * 0.20, 0.004, 0.4))
-}
-
-// Snout / upper jaw: tapers from skull downward, slight rightward lean
-for (let i = 0; i < 55; i++) {
-  const t = rnd()  // 0=skull base, 1=snout tip
-  const halfW = 22 * (1 - t * 0.82)
-  const dx = (rnd() * 2 - 1) * halfW + t * 8  // slight right lean
-  const dy = 8 + t * 62
-  DRAGON.push(hp(dx, dy, 0.72 + rnd() * 0.25, 0.003, 0.5))
-}
-
-// Lower jaw: separated from snout by mouth gap (~10px)
-for (let i = 0; i < 38; i++) {
-  const t = rnd()
-  const halfW = 18 * (1 - t * 0.65)
-  const dx = (rnd() * 2 - 1) * halfW + 12 + t * 6  // offset right — jaw hangs open
-  const dy = 58 + t * 32   // below the gap
-  DRAGON.push(hp(dx, dy, 0.65 + rnd() * 0.30, 0.004, 0.6))
-}
-
-// Snout tip wisps / fire breath (below lower jaw)
-for (let i = 0; i < 20; i++) {
-  const t = rnd()
-  const dx = (rnd() * 2 - 1) * 10 * (1 - t) + 14
-  const dy = 90 + t * 30
-  DRAGON.push(hp(dx, dy, (0.15 + rnd() * 0.30) * (1 - t * 0.7), 0.012, 1.5))
-}
-
-// Left horn: curves up-left from skull
-for (let i = 0; i < 14; i++) {
-  const t = i / 14
-  DRAGON.push(hp(-18 - t * 12 + (rnd() - 0.5) * 5, -38 - t * 28 + (rnd() - 0.5) * 4, 0.55 + rnd() * 0.35, 0.005, 0.8))
-}
-// Right horn: curves up-right, slightly shorter
-for (let i = 0; i < 10; i++) {
-  const t = i / 10
-  DRAGON.push(hp(18 + t * 10 + (rnd() - 0.5) * 4, -42 - t * 20 + (rnd() - 0.5) * 4, 0.50 + rnd() * 0.35, 0.005, 0.8))
-}
-
-// Left eye pupil — bright cluster inside left socket void, flashes often
-for (let i = 0; i < 5; i++) {
-  DRAGON.push(hp(-18 + (rnd() - 0.5) * 8, -28 + (rnd() - 0.5) * 5, 0.95, 0.04, 0.15))
-}
-// Right eye pupil — same, mirrored
-for (let i = 0; i < 5; i++) {
-  DRAGON.push(hp(18 + (rnd() - 0.5) * 8, -28 + (rnd() - 0.5) * 5, 0.95, 0.04, 0.15))
-}
-
-// Brow ridge — thickened rows above each eye socket, inner corners lower (scowl)
-for (let i = 0; i < 12; i++) {
-  // Left brow: curves from (-28, -33) inner-low to (-8, -36) outer-high
-  const t = i / 11
-  const bx = -28 + t * 20
-  const by = -33 - t * 3 + (rnd() - 0.5) * 3 // inner lower, outer higher
-  DRAGON.push(hp(bx + (rnd() - 0.5) * 4, by, 0.75 + rnd() * 0.20, 0.004, 0.35))
-}
-for (let i = 0; i < 12; i++) {
-  // Right brow: mirrored, curves from (8, -36) inner-low to (28, -33) outer-high
-  const t = i / 11
-  const bx = 8 + t * 20
-  const by = -36 + t * 3 + (rnd() - 0.5) * 3
-  DRAGON.push(hp(bx + (rnd() - 0.5) * 4, by, 0.75 + rnd() * 0.20, 0.004, 0.35))
-}
-
-// Skull fringe / scale wisps around perimeter
-for (let i = 0; i < 30; i++) {
-  const angle = rnd() * Math.PI * 2
-  const r = 44 + rnd() * 20
-  DRAGON.push(hp(Math.cos(angle) * r, -18 + Math.sin(angle) * r * 0.75, 0.15 + rnd() * 0.30, 0.006, 1.4))
-}
-
-// Neck (connects skull to body, slightly above center)
-for (let i = 0; i < 22; i++) {
-  const t = rnd()
-  const dx = (rnd() * 2 - 1) * (12 - t * 4)
-  const dy = -(50 + t * 35)
-  DRAGON.push(hp(dx, dy, 0.60 + rnd() * 0.30, 0.003, 0.5))
-}
-
-// ── DRAGON BODY — 550 particles, three-zone thickness profile ────────────────
-// spineT: 0=neck origin, 1=tail tip. Position computed at render time.
-// Zone 1 (t<0.4): thick dense core. Zone 2 (0.4–0.75): tapering. Zone 3 (≥0.75): wispy tail.
-
-const BODY_TOTAL = 550
-for (let i = 0; i < BODY_TOTAL; i++) {
-  const t = Math.pow(i / (BODY_TOTAL - 1), 1.4)
-  let perpOffset: number, a: number, lc: number, jAmp: number
-
-  if (t < 0.4) {
-    // Zone 1 — thick/dense: 26px half-width, high opacity
-    const bodyHalfW = 26 * (1 - t * 0.15)
-    if (rnd() < 0.72) {
-      perpOffset = (rnd() * 2 - 1) * bodyHalfW
-      a = 0.50 + rnd() * 0.25
-      lc = 0.005; jAmp = 0.7
-    } else {
-      const sign = rnd() > 0.5 ? 1 : -1
-      perpOffset = sign * (bodyHalfW + 3 + rnd() * 55 * Math.pow(1 - t, 0.85))
-      a = 0.25 + rnd() * 0.20
-      lc = 0.003; jAmp = 1.3
-    }
-  } else if (t < 0.75) {
-    // Zone 2 — tapering: 20px → 10px half-width
-    const zoneFrac = (t - 0.4) / 0.35
-    const bodyHalfW = 20 - zoneFrac * 10
-    if (rnd() < 0.45) {
-      perpOffset = (rnd() * 2 - 1) * bodyHalfW
-      a = (0.35 + rnd() * 0.20) * Math.pow(1 - t, 0.4)
-      lc = 0.003; jAmp = 0.8
-    } else {
-      const sign = rnd() > 0.5 ? 1 : -1
-      perpOffset = sign * (bodyHalfW + 2 + rnd() * 40 * Math.pow(1 - t, 0.9))
-      a = (0.15 + rnd() * 0.18) * Math.pow(1 - t, 0.6)
-      lc = 0.002; jAmp = 1.5
-    }
-  } else {
-    // Zone 3 — wispy tail: 2–8px, very sparse
-    const bodyHalfW = 8 * Math.pow(1 - t, 0.5)
-    if (rnd() < 0.30) {
-      perpOffset = (rnd() * 2 - 1) * bodyHalfW
-      a = (0.12 + rnd() * 0.15) * Math.pow(1 - t, 0.3)
-      lc = 0.001; jAmp = 1.0
-    } else {
-      const sign = rnd() > 0.5 ? 1 : -1
-      perpOffset = sign * (bodyHalfW + rnd() * 20 * Math.pow(1 - t, 1.2))
-      a = (0.05 + rnd() * 0.12) * Math.pow(1 - t, 0.5)
-      lc = 0.001; jAmp = 1.8
-    }
-  }
-
-  DRAGON.push(bp(t, perpOffset, a, lc, jAmp))
-}
+// ─── Dragon grid renderer constants ─────────────────────────────────────────
+// Head grid scan range (grid cells from skull center)
+const HEAD_SCAN_COLS = 20 // -20 to +20
+const HEAD_SCAN_ROWS = 20 // -20 to +20
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -369,9 +174,11 @@ export function IntroAnimation() {
   const screenRectRef  = useRef<ScreenRect>(computeScreenRect())
   const [screenDims, setScreenDims] = useState<ScreenRect>(() => computeScreenRect())
 
-  // Dragon spine engine (FABRIK chain — powers all dragon movement)
-  const dragonStateRef = useRef(createDragon())
-  const lastFrameRef   = useRef(0)
+  // Dragon grid renderer state
+  const headYBufferRef = useRef<number[]>([])  // 6-frame rolling scroll velocity buffer
+  const headAngleRef   = useRef(Math.PI / 2)   // lerped head angle (radians, π/2 = facing down)
+  const lightMapRef    = useRef(new Map<string, number>()) // per-cell light timers
+  const frameCountRef  = useRef(0)
 
   // Screensaver bounce
   const bouncePosRef = useRef({ x: 0, y: 0 })
@@ -654,7 +461,7 @@ export function IntroAnimation() {
       ctx.textAlign    = 'left'
       ctx.textBaseline = 'alphabetic'
 
-      // ── Portal canvas: Path B dragon scroll creature ─────────────────────
+      // ── Portal canvas: Path B dragon scroll creature (grid renderer) ────
       const sc = swarmCanvasRef.current?.getContext('2d')
       if (sc && swarmCanvasRef.current) {
         const vw = swarmCanvasRef.current.width
@@ -670,100 +477,126 @@ export function IntroAnimation() {
 
             if (introBottom < triggerPoint) {
               const scrollProg   = 1 - introBottom / triggerPoint
-              const opacity      = Math.min(1, scrollProg * 3)
+              const dragonAlpha  = Math.min(1, scrollProg * 3)
               const headY = viewportH * 0.1 + scrollProg * viewportH * 0.25
-              const baseHx = screenRectRef.current.sl + screenRectRef.current.sw * 0.2
+              const baseHx = screenRectRef.current.sl + screenRectRef.current.sw * 0.5
               const portalColor = isDark ? '#f0efe9' : '#0a0a0a'
               const glowColor   = isDark ? 'rgba(255,185,80,0.65)' : 'rgba(255,120,40,0.55)'
               const tSec = now / 1000
+              const frame = frameCountRef.current++
 
-              // ── Dragon engine update ──────────────────────────────────
-              // Compute head target from scroll state
-              const hx = baseHx + Math.sin(tSec * 0.4) * 12
-              const dt = lastFrameRef.current ? (now - lastFrameRef.current) / 1000 : 1 / 60
-              lastFrameRef.current = now
+              // ── Head angle from scroll velocity ──────────────────────
+              const buf = headYBufferRef.current
+              buf.push(headY)
+              if (buf.length > 6) buf.shift()
+              let scrollVel = 0
+              if (buf.length >= 2) {
+                scrollVel = buf[buf.length - 1] - buf[0]
+              }
+              // Target angle: π/2 (facing down) + horizontal wobble from sine
+              const hx = baseHx + Math.sin(tSec * 0.4) * 60
+              const targetAngle = Math.atan2(scrollVel * 0.3, 1) + Math.PI / 2
+              headAngleRef.current += (targetAngle - headAngleRef.current) * 0.07
+              const headAngle = headAngleRef.current
 
-              // Update FABRIK spine — head chases target, body follows
-              updateDragon(dragonStateRef.current, hx, headY, dt)
-
-              const ds = dragonStateRef.current
-              const headPt = ds.spine[0]
-              const headAngle = headPt.angle + ds.headRoll
-              const cos_a = Math.cos(headAngle)
-              const sin_a = Math.sin(headAngle)
+              // Phase drives spine wave animation
+              const phase2 = scrollProg * 8 + tSec * 0.3
 
               sc.font         = `${FONT_SIZE}px "IBM Plex Mono", monospace`
               sc.textAlign    = 'center'
               sc.textBaseline = 'middle'
 
-              // Update light timers for all particles this frame
-              for (const m of DRAGON) {
-                if (m.lightTimer > 0) {
-                  m.lightTimer--
-                } else if (rnd() < m.lightChance) {
-                  m.lightTimer = 8 + Math.floor(rnd() * 14)
+              const lights = lightMapRef.current
+
+              // ── Render body — spine samples → ribcage cross-sections ──
+              for (let si = 0; si < SPINE_SAMPLES; si++) {
+                const t = si / (SPINE_SAMPLES - 1) // 0=head, 1=tail
+                const sp = spinePos(t, hx, headY, BODY_LENGTH, phase2)
+                const tan = spineTangent(t, BODY_LENGTH, phase2)
+                // Perpendicular to tangent (normal vector)
+                const nx = -tan.ty
+                const ny =  tan.tx
+                const radius = ribRadius(t)
+
+                // Scan across the ribcage cross-section in grid cells
+                const cellCount = Math.ceil(radius) * 2 + 1
+                for (let ci = 0; ci < cellCount; ci++) {
+                  const ribCell = ci - Math.ceil(radius)
+                  const d = Math.abs(ribCell) / Math.max(1, radius) // 0=core, 1=edge
+                  if (d > 1.05) continue
+
+                  const seed = cellSeed(si, ribCell, frame)
+                  const char = charForDist(d, seed)
+                  const alpha = dragonAlpha * bodyOpacity(t, d)
+                  if (alpha < 0.01) continue
+
+                  // World position: spine + perpendicular offset in grid-cell units
+                  const px = sp.x + nx * ribCell * CELL_W
+                  const py = sp.y + ny * ribCell * CELL_H
+
+                  // Light system
+                  const key = `${si},${ribCell}`
+                  let lit = lights.get(key) ?? 0
+                  if (lit > 0) {
+                    lit--
+                    lights.set(key, lit)
+                  } else if (Math.random() < lightChance(t, false)) {
+                    lit = 8 + Math.floor(Math.random() * 14)
+                    lights.set(key, lit)
+                  }
+
+                  if (lit > 0) {
+                    sc.shadowBlur  = 7
+                    sc.shadowColor = glowColor
+                    sc.globalAlpha = Math.min(1, alpha * 1.6)
+                  } else {
+                    sc.shadowBlur  = 0
+                    sc.globalAlpha = alpha
+                  }
+                  sc.fillStyle = portalColor
+                  sc.fillText(char, px, py)
                 }
               }
 
-              // ── Render body first (behind head) ───────────────────────────
-              // Body particles positioned along FABRIK spine with perpendicular offset
-              sc.shadowBlur = 0
-              for (const m of DRAGON) {
-                if (m.isHead) continue
+              // ── Render head — rotated grid in canvas coords ──────────
+              sc.save()
+              sc.translate(hx, headY)
+              sc.rotate(headAngle - Math.PI / 2) // rotate so "right" in head-local = travel direction
 
-                // Get spine position + angle at this particle's spineT
-                const sp = getSpinePointAt(ds, m.spineT, BODY_SPINE_START)
-                // Perpendicular to spine direction
-                const perpX = -Math.sin(sp.angle)
-                const perpY =  Math.cos(sp.angle)
+              for (let row = -HEAD_SCAN_ROWS; row <= HEAD_SCAN_ROWS; row++) {
+                for (let col = -HEAD_SCAN_COLS; col <= HEAD_SCAN_COLS; col++) {
+                  const seed = cellSeed(col + 100, row + 100, frame)
+                  const hc = headCell(col, row, seed)
+                  if (!hc) continue
 
-                const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX
-                const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY
-                const px = sp.x + m.perpOffset * perpX + jx
-                const py = sp.y + m.perpOffset * perpY + jy
+                  const alpha = dragonAlpha * hc.opacity
+                  if (alpha < 0.01) continue
 
-                const alpha = opacity * m.a
-                if (alpha < 0.01) continue
+                  // Light system for head cells
+                  const key = `h${col},${row}`
+                  let lit = lights.get(key) ?? 0
+                  if (lit > 0) {
+                    lit--
+                    lights.set(key, lit)
+                  } else if (Math.random() < lightChance(0, hc.isPupil)) {
+                    lit = 8 + Math.floor(Math.random() * 14)
+                    lights.set(key, lit)
+                  }
 
-                if (m.lightTimer > 0) {
-                  sc.shadowBlur  = 7
-                  sc.shadowColor = glowColor
-                  sc.globalAlpha = Math.min(1, alpha * 1.6)
-                } else {
-                  sc.shadowBlur  = 0
-                  sc.globalAlpha = alpha
+                  if (lit > 0 || hc.isPupil) {
+                    sc.shadowBlur  = hc.isPupil ? 10 : 8
+                    sc.shadowColor = glowColor
+                    sc.globalAlpha = Math.min(1, alpha * (hc.isPupil ? 2.0 : 1.7))
+                  } else {
+                    sc.shadowBlur  = 0
+                    sc.globalAlpha = alpha
+                  }
+                  sc.fillStyle = portalColor
+                  sc.fillText(hc.char, col * CELL_W, row * CELL_H)
                 }
-                sc.fillStyle = portalColor
-                sc.fillText(m.char, px, py)
               }
 
-              // ── Render head on top — rotated by spine[0] angle ──────────
-              for (const m of DRAGON) {
-                if (!m.isHead) continue
-
-                // Rotate head-local offsets by headAngle so skull tracks the spine
-                const rdx = m.dx * cos_a - m.dy * sin_a
-                const rdy = m.dx * sin_a + m.dy * cos_a
-                const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX * 0.5
-                const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY * 0.5
-                const px = headPt.x + rdx + jx
-                const py = headPt.y + rdy + jy
-
-                const alpha = opacity * m.a
-                if (alpha < 0.01) continue
-
-                if (m.lightTimer > 0) {
-                  sc.shadowBlur  = 8
-                  sc.shadowColor = glowColor
-                  sc.globalAlpha = Math.min(1, alpha * 1.7)
-                } else {
-                  sc.shadowBlur  = 0
-                  sc.globalAlpha = alpha
-                }
-                sc.fillStyle = portalColor
-                sc.fillText(m.char, px, py)
-              }
-
+              sc.restore()
               sc.shadowBlur   = 0
               sc.globalAlpha  = 1
               sc.textAlign    = 'left'
