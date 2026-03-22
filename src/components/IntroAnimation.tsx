@@ -134,6 +134,22 @@ const WARP_SPRING   = 0.15
 // Head faces DOWN (direction of travel). Body trails UPWARD behind.
 // +dy = down on screen. Body uses spine-relative coords, rendered at runtime.
 
+// Eye socket void test — diamond shape in head-local coords
+function isInEyeSocket(dx: number, dy: number): boolean {
+  const sA = 11, sB = 7, tilt = 0.25
+  // Left socket center (-18, -28)
+  const ltx = dx + 18, lty = dy + 28
+  const lrx = ltx * Math.cos(tilt) + lty * Math.sin(tilt)
+  const lry = -ltx * Math.sin(tilt) + lty * Math.cos(tilt)
+  if (Math.abs(lrx) / sA + Math.abs(lry) / sB <= 1) return true
+  // Right socket center (+18, -28), mirrored tilt
+  const rtx = dx - 18, rty = dy + 28
+  const rrx = rtx * Math.cos(tilt) - rty * Math.sin(tilt)
+  const rry = rtx * Math.sin(tilt) + rty * Math.cos(tilt)
+  if (Math.abs(rrx) / sA + Math.abs(rry) / sB <= 1) return true
+  return false
+}
+
 interface DragonPart {
   isHead: boolean
   // Head: absolute px offsets from head center
@@ -157,8 +173,7 @@ interface DragonPart {
 const WAVE_AMP          = 42   // px amplitude of sine slither
 const WAVE_FREQ         = 2.8  // S-curves across full body
 const WAVE_PHASE_SPEED  = 7    // how fast wave shifts with scroll (slither speed)
-const BODY_MAX_HALF_W   = 20   // max body half-width (middle column)
-const BODY_STRAG_MAX    = 58   // max straggler spread from body center
+const NECK_OFFSET       = 75   // px behind head where body originates
 
 const DRAGON: DragonPart[] = []
 
@@ -181,12 +196,17 @@ function bp(spineT: number, perpOffset: number, a: number, lc: number, jAmp = 1)
 
 // ── DRAGON HEAD — faces DOWN, ~280 particles ─────────────────────────────────
 
-// Skull: large oval mass, center shifted upward from head anchor
+// Skull: large oval mass — eye socket voids excluded via rejection sampling
 for (let i = 0; i < 130; i++) {
-  const angle = rnd() * Math.PI * 2
-  const r = Math.sqrt(rnd())  // uniform area density
-  const rx = 44, ry = 32
-  DRAGON.push(hp(Math.cos(angle) * r * rx, -18 + Math.sin(angle) * r * ry, 0.80 + rnd() * 0.20, 0.004, 0.4))
+  let dx = 0, dy = 0, attempts = 0
+  do {
+    const angle = rnd() * Math.PI * 2
+    const r = Math.sqrt(rnd())
+    dx = Math.cos(angle) * r * 44
+    dy = -18 + Math.sin(angle) * r * 32
+    attempts++
+  } while (isInEyeSocket(dx, dy) && attempts < 50)
+  DRAGON.push(hp(dx, dy, 0.80 + rnd() * 0.20, 0.004, 0.4))
 }
 
 // Snout / upper jaw: tapers from skull downward, slight rightward lean
@@ -226,9 +246,13 @@ for (let i = 0; i < 10; i++) {
   DRAGON.push(hp(18 + t * 10 + (rnd() - 0.5) * 4, -42 - t * 20 + (rnd() - 0.5) * 4, 0.50 + rnd() * 0.35, 0.005, 0.8))
 }
 
-// Eye: bright cluster on right side of skull — glows frequently
-for (let i = 0; i < 7; i++) {
-  DRAGON.push(hp(16 + (rnd() - 0.5) * 7, -12 + (rnd() - 0.5) * 6, 0.95, 0.025, 0.2))
+// Left eye pupil — bright cluster inside left socket void, flashes often
+for (let i = 0; i < 5; i++) {
+  DRAGON.push(hp(-18 + (rnd() - 0.5) * 8, -28 + (rnd() - 0.5) * 5, 0.95, 0.04, 0.15))
+}
+// Right eye pupil — same, mirrored
+for (let i = 0; i < 5; i++) {
+  DRAGON.push(hp(18 + (rnd() - 0.5) * 8, -28 + (rnd() - 0.5) * 5, 0.95, 0.04, 0.15))
 }
 
 // Skull fringe / scale wisps around perimeter
@@ -246,35 +270,55 @@ for (let i = 0; i < 22; i++) {
   DRAGON.push(hp(dx, dy, 0.60 + rnd() * 0.30, 0.003, 0.5))
 }
 
-// ── DRAGON BODY — 460 particles along sinusoidal spine ──────────────────────
-// spineT: 0=right behind head, 1=tail tip
-// Position computed at render time from sine-wave spine
+// ── DRAGON BODY — 550 particles, three-zone thickness profile ────────────────
+// spineT: 0=neck origin, 1=tail tip. Position computed at render time.
+// Zone 1 (t<0.4): thick dense core. Zone 2 (0.4–0.75): tapering. Zone 3 (≥0.75): wispy tail.
 
-const BODY_TOTAL = 460
+const BODY_TOTAL = 550
 for (let i = 0; i < BODY_TOTAL; i++) {
-  // Non-uniform: cube-root pushes density toward front
   const t = Math.pow(i / (BODY_TOTAL - 1), 1.4)
-
-  // Body width and straggler spread both taper toward tail
-  const bodyHalfW = BODY_MAX_HALF_W * Math.pow(1 - t, 0.65)
-  const stagSpread = BODY_STRAG_MAX  * Math.pow(1 - t, 0.85)
-
-  // Near front: 60% middle. Near tail: ~8%
-  const isMiddle = rnd() < 0.60 * Math.pow(1 - t, 0.55)
-
   let perpOffset: number, a: number, lc: number, jAmp: number
 
-  if (isMiddle) {
-    perpOffset = (rnd() * 2 - 1) * bodyHalfW
-    a  = (0.55 + rnd() * 0.30) * Math.pow(1 - t, 0.50)
-    lc = 0.004 * (1 - t * 0.7)
-    jAmp = 0.7
+  if (t < 0.4) {
+    // Zone 1 — thick/dense: 26px half-width, high opacity
+    const bodyHalfW = 26 * (1 - t * 0.15)
+    if (rnd() < 0.72) {
+      perpOffset = (rnd() * 2 - 1) * bodyHalfW
+      a = 0.50 + rnd() * 0.25
+      lc = 0.005; jAmp = 0.7
+    } else {
+      const sign = rnd() > 0.5 ? 1 : -1
+      perpOffset = sign * (bodyHalfW + 3 + rnd() * 55 * Math.pow(1 - t, 0.85))
+      a = 0.25 + rnd() * 0.20
+      lc = 0.003; jAmp = 1.3
+    }
+  } else if (t < 0.75) {
+    // Zone 2 — tapering: 20px → 10px half-width
+    const zoneFrac = (t - 0.4) / 0.35
+    const bodyHalfW = 20 - zoneFrac * 10
+    if (rnd() < 0.45) {
+      perpOffset = (rnd() * 2 - 1) * bodyHalfW
+      a = (0.35 + rnd() * 0.20) * Math.pow(1 - t, 0.4)
+      lc = 0.003; jAmp = 0.8
+    } else {
+      const sign = rnd() > 0.5 ? 1 : -1
+      perpOffset = sign * (bodyHalfW + 2 + rnd() * 40 * Math.pow(1 - t, 0.9))
+      a = (0.15 + rnd() * 0.18) * Math.pow(1 - t, 0.6)
+      lc = 0.002; jAmp = 1.5
+    }
   } else {
-    const sign = rnd() > 0.5 ? 1 : -1
-    perpOffset = sign * (bodyHalfW + 3 + rnd() * stagSpread)
-    a  = (0.18 + rnd() * 0.18) * Math.pow(1 - t, 0.90)
-    lc = 0.002 * (1 - t * 0.6)
-    jAmp = 1.5  // stragglers wiggle more
+    // Zone 3 — wispy tail: 2–8px, very sparse
+    const bodyHalfW = 8 * Math.pow(1 - t, 0.5)
+    if (rnd() < 0.30) {
+      perpOffset = (rnd() * 2 - 1) * bodyHalfW
+      a = (0.12 + rnd() * 0.15) * Math.pow(1 - t, 0.3)
+      lc = 0.001; jAmp = 1.0
+    } else {
+      const sign = rnd() > 0.5 ? 1 : -1
+      perpOffset = sign * (bodyHalfW + rnd() * 20 * Math.pow(1 - t, 1.2))
+      a = (0.05 + rnd() * 0.12) * Math.pow(1 - t, 0.5)
+      lc = 0.001; jAmp = 1.8
+    }
   }
 
   DRAGON.push(bp(t, perpOffset, a, lc, jAmp))
@@ -311,8 +355,11 @@ export function IntroAnimation() {
   const rafRef         = useRef<number>(0)
   const themeRef       = useRef(theme)
 
-  const screenRectRef = useRef<ScreenRect>(computeScreenRect())
+  const screenRectRef  = useRef<ScreenRect>(computeScreenRect())
   const [screenDims, setScreenDims] = useState<ScreenRect>(() => computeScreenRect())
+
+  // Dragon head rotation (spring-interpolated toward spine tangent angle)
+  const headAngleRef = useRef(0)
 
   // Screensaver bounce
   const bouncePosRef = useRef({ x: 0, y: 0 })
@@ -628,6 +675,21 @@ export function IntroAnimation() {
               // Trail length: how far above head the body extends
               const trailLen = headY * 0.9
 
+              // Head rotation — spring toward spine tangent angle at t=0
+              // d/dt[sin(t*2π*FREQ+phase)] at t=0 = cos(phase)*2π*FREQ*AMP
+              const targetAngle = Math.atan2(
+                Math.cos(scrollPhase) * Math.PI * 2 * WAVE_FREQ * WAVE_AMP,
+                trailLen,
+              )
+              headAngleRef.current += (targetAngle - headAngleRef.current) * 0.12
+              const headAngle = headAngleRef.current
+              const cos_a = Math.cos(headAngle)
+              const sin_a = Math.sin(headAngle)
+
+              // Body originates ~75px behind head along neck direction
+              const bodyOriginX = hx - sin_a * NECK_OFFSET
+              const bodyOriginY = headY - cos_a * NECK_OFFSET
+
               sc.font         = `${FONT_SIZE}px "IBM Plex Mono", monospace`
               sc.textAlign    = 'center'
               sc.textBaseline = 'middle'
@@ -646,16 +708,15 @@ export function IntroAnimation() {
               for (const m of DRAGON) {
                 if (m.isHead) continue
 
-                const spineX = hx + Math.sin(m.spineT * Math.PI * 2 * WAVE_FREQ + scrollPhase) * WAVE_AMP - phaseAtHead
-                const spineY = headY - m.spineT * trailLen
+                const spineX = bodyOriginX + Math.sin(m.spineT * Math.PI * 2 * WAVE_FREQ + scrollPhase) * WAVE_AMP - phaseAtHead
+                const spineY = bodyOriginY - m.spineT * trailLen
 
                 const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX
                 const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY
                 const px = spineX + m.perpOffset + jx
                 const py = spineY + jy
 
-                // Opacity fades toward tail
-                const alpha = opacity * m.a * Math.pow(1 - m.spineT, 0.4)
+                const alpha = opacity * m.a
                 if (alpha < 0.01) continue
 
                 if (m.lightTimer > 0) {
@@ -670,14 +731,17 @@ export function IntroAnimation() {
                 sc.fillText(m.char, px, py)
               }
 
-              // ── Render head on top ────────────────────────────────────────
+              // ── Render head on top — rotated to align with body direction ─
               for (const m of DRAGON) {
                 if (!m.isHead) continue
 
+                // Rotate head-local offsets by headAngle so skull tracks the spine
+                const rdx = m.dx * cos_a - m.dy * sin_a
+                const rdy = m.dx * sin_a + m.dy * cos_a
                 const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX * 0.5
                 const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY * 0.5
-                const px = hx + m.dx + jx
-                const py = headY + m.dy + jy
+                const px = hx + rdx + jx
+                const py = headY + rdy + jy
 
                 const alpha = opacity * m.a
                 if (alpha < 0.01) continue
