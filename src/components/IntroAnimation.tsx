@@ -115,126 +115,169 @@ const CHARS = '0123456789!@#$%^&*()_-+=[]{}|;:,./<>?~`\'"\\abcdefghijklmnopqrstu
 const PARTICLE_COUNT = ZK_GRID.reduce((sum, row) => sum + row.filter((v) => v === 1).length, 0)
 
 const GRAVITY       = 0.3
-const BOUNCE_SPEED  = 0.45  // slower, smoother drift
-const SQUISH_FACTOR = 0.65  // dramatic full-letter squish
-const SQUISH_SPRING = 0.03  // very slow recovery for visible effect
+const BOUNCE_SPEED = 0.45
+
+// Wall smoosh — state machine: float → press into wall → release off wall → float
+const PRESS_FRAMES   = 50    // ~0.83s to reach max squash (ZK presses flat against wall)
+const RELEASE_FRAMES = 35    // ~0.58s to peel off (slow start, accelerates away)
+const SQUASH_DEPTH   = 0.85  // flattest scale on hit axis at max compression
+const COUPLE         = 0.55  // perpendicular axis stretches when squashed
+const JELLO_K        = 0.035 // post-release wobble spring (very gentle)
+const JELLO_D        = 0.93  // wobble damping (slow settle, many oscillations)
+const JELLO_KICK     = 0.04  // velocity kick on release to start wobble
 
 const WARP_RADIUS   = 55
 const WARP_STRENGTH = 50
 const WARP_SPRING   = 0.15
 
-// ─── Meteor particles (Path B scroll snake) — precomputed at module load ────
+// ─── Dragon — Path B scroll creature ─────────────────────────────────────────
+// Head faces DOWN (direction of travel). Body trails UPWARD behind.
+// +dy = down on screen. Body uses spine-relative coords, rendered at runtime.
 
-// Head geometry
-const METEOR_HEAD_R   = 62   // core circle radius
-const METEOR_STAG_R   = 82   // max straggler radius around head
-
-// Trail geometry — trail spans normalized 0(front)→1(back), scaled by headY at render
-const TRAIL_MID_START_W  = 28   // middle column half-width at front of trail (px)
-const TRAIL_STAG_START   = 95   // straggler max spread at front of trail (px)
-
-interface MeteorPart {
+interface DragonPart {
+  isHead: boolean
+  // Head: absolute px offsets from head center
   dx: number
-  // isHead=true:  dy is absolute px offset from head center
-  // isHead=false: dy is normalized 0→-1 (scaled by trail length at render)
   dy: number
+  // Body: spine-relative (rendered at runtime from sine-wave spine)
+  spineT: number       // 0 = near head, 1 = far tail
+  perpOffset: number   // px left/right from spine
+  // Shared
   a: number
   char: string
-  isHead: boolean
   jitterPhase: number
   jitterAmpX: number
   jitterAmpY: number
   jitterSpeed: number
+  lightTimer: number   // frames remaining "lit" (mutable per frame)
+  lightChance: number  // probability per frame of igniting
 }
 
-const METEOR: MeteorPart[] = []
+// Slithering body constants
+const WAVE_AMP          = 42   // px amplitude of sine slither
+const WAVE_FREQ         = 2.8  // S-curves across full body
+const WAVE_PHASE_SPEED  = 7    // how fast wave shifts with scroll (slither speed)
+const BODY_MAX_HALF_W   = 20   // max body half-width (middle column)
+const BODY_STRAG_MAX    = 58   // max straggler spread from body center
+
+const DRAGON: DragonPart[] = []
 
 function rnd() { return Math.random() }
 function randChar() { return CHARS[Math.floor(rnd() * CHARS.length)] }
-function jitterProps(ampScale = 1) {
+function jp(ampScale = 1) {
   return {
     jitterPhase: rnd() * Math.PI * 2,
-    jitterAmpX: (0.6 + rnd() * 3.0) * ampScale,
-    jitterAmpY: (0.4 + rnd() * 1.8) * ampScale,
-    jitterSpeed: 1.2 + rnd() * 3.0,
+    jitterAmpX:  (0.5 + rnd() * 2.5) * ampScale,
+    jitterAmpY:  (0.3 + rnd() * 1.5) * ampScale,
+    jitterSpeed: 1.0 + rnd() * 3.0,
   }
 }
-
-// ── Head core: uniformly packed circle ──────────────────────────────────────
-// sqrt distribution gives uniform area density (no center clustering)
-const HEAD_CORE_COUNT = 140
-for (let i = 0; i < HEAD_CORE_COUNT; i++) {
-  const angle = rnd() * Math.PI * 2
-  const r = Math.sqrt(rnd()) * METEOR_HEAD_R
-  METEOR.push({
-    dx: Math.cos(angle) * r,
-    dy: Math.sin(angle) * r * 0.65,  // slightly oval
-    a: 0.82 + rnd() * 0.18,
-    char: randChar(),
-    isHead: true,
-    ...jitterProps(0.4),  // tight jitter — head stays crisp
-  })
+function hp(dx: number, dy: number, a: number, lc: number, jAmp = 1): DragonPart {
+  return { isHead: true, dx, dy, spineT: 0, perpOffset: 0, a, char: randChar(), ...jp(jAmp), lightTimer: 0, lightChance: lc }
+}
+function bp(spineT: number, perpOffset: number, a: number, lc: number, jAmp = 1): DragonPart {
+  return { isHead: false, dx: 0, dy: 0, spineT, perpOffset, a, char: randChar(), ...jp(jAmp), lightTimer: 0, lightChance: lc }
 }
 
-// ── Head stragglers: debris + flame wisps around the circle ─────────────────
-const HEAD_STAG_COUNT = 70
-for (let i = 0; i < HEAD_STAG_COUNT; i++) {
+// ── DRAGON HEAD — faces DOWN, ~280 particles ─────────────────────────────────
+
+// Skull: large oval mass, center shifted upward from head anchor
+for (let i = 0; i < 130; i++) {
   const angle = rnd() * Math.PI * 2
-  // r between HEAD_R * 0.85 and STAG_R — clustered near edge with some far wisps
-  const r = METEOR_HEAD_R * 0.85 + Math.pow(rnd(), 0.7) * (METEOR_STAG_R - METEOR_HEAD_R * 0.85)
-  METEOR.push({
-    dx: Math.cos(angle) * r,
-    dy: Math.sin(angle) * r * 0.65,
-    a: 0.25 + rnd() * 0.40,          // dimmer — wisps/embers
-    char: randChar(),
-    isHead: true,
-    ...jitterProps(1.2),              // more jitter — live, flickery
-  })
+  const r = Math.sqrt(rnd())  // uniform area density
+  const rx = 44, ry = 32
+  DRAGON.push(hp(Math.cos(angle) * r * rx, -18 + Math.sin(angle) * r * ry, 0.80 + rnd() * 0.20, 0.004, 0.4))
 }
 
-// ── Trail: continuous t=0(front)→1(back), density falls off toward back ─────
-// More particles allocated near front via t = (i/N)^1.4 distribution
-const TRAIL_TOTAL = 380
-for (let i = 0; i < TRAIL_TOTAL; i++) {
-  // Non-uniform t: square-root pushes more particles near t=0 (front)
-  const t = Math.pow(i / (TRAIL_TOTAL - 1), 1.5)
-  const dy = -t  // normalized; multiplied by headY at render
+// Snout / upper jaw: tapers from skull downward, slight rightward lean
+for (let i = 0; i < 55; i++) {
+  const t = rnd()  // 0=skull base, 1=snout tip
+  const halfW = 22 * (1 - t * 0.82)
+  const dx = (rnd() * 2 - 1) * halfW + t * 8  // slight right lean
+  const dy = 8 + t * 62
+  DRAGON.push(hp(dx, dy, 0.72 + rnd() * 0.25, 0.003, 0.5))
+}
 
-  // Middle column half-width: starts wide, tapers to nearly zero at tail
-  const midHalfW = TRAIL_MID_START_W * Math.pow(1 - t, 0.7)
+// Lower jaw: separated from snout by mouth gap (~10px)
+for (let i = 0; i < 38; i++) {
+  const t = rnd()
+  const halfW = 18 * (1 - t * 0.65)
+  const dx = (rnd() * 2 - 1) * halfW + 12 + t * 6  // offset right — jaw hangs open
+  const dy = 58 + t * 32   // below the gap
+  DRAGON.push(hp(dx, dy, 0.65 + rnd() * 0.30, 0.004, 0.6))
+}
 
-  // Straggler max spread: large near front, shrinks to small at tail
-  const stagMax  = TRAIL_STAG_START * Math.pow(1 - t, 0.9)
+// Snout tip wisps / fire breath (below lower jaw)
+for (let i = 0; i < 20; i++) {
+  const t = rnd()
+  const dx = (rnd() * 2 - 1) * 10 * (1 - t) + 14
+  const dy = 90 + t * 30
+  DRAGON.push(hp(dx, dy, (0.15 + rnd() * 0.30) * (1 - t * 0.7), 0.012, 1.5))
+}
 
-  // Probability this particle lands in the middle column vs straggler zone
-  // Near front: 55% middle. Near tail: ~5% middle (mostly stragglers disappear too)
-  const midProb = 0.55 * Math.pow(1 - t, 0.6)
-  const isMiddle = rnd() < midProb
+// Left horn: curves up-left from skull
+for (let i = 0; i < 14; i++) {
+  const t = i / 14
+  DRAGON.push(hp(-18 - t * 12 + (rnd() - 0.5) * 5, -38 - t * 28 + (rnd() - 0.5) * 4, 0.55 + rnd() * 0.35, 0.005, 0.8))
+}
+// Right horn: curves up-right, slightly shorter
+for (let i = 0; i < 10; i++) {
+  const t = i / 10
+  DRAGON.push(hp(18 + t * 10 + (rnd() - 0.5) * 4, -42 - t * 20 + (rnd() - 0.5) * 4, 0.50 + rnd() * 0.35, 0.005, 0.8))
+}
 
-  let dx: number
-  let a: number
+// Eye: bright cluster on right side of skull — glows frequently
+for (let i = 0; i < 7; i++) {
+  DRAGON.push(hp(16 + (rnd() - 0.5) * 7, -12 + (rnd() - 0.5) * 6, 0.95, 0.025, 0.2))
+}
+
+// Skull fringe / scale wisps around perimeter
+for (let i = 0; i < 30; i++) {
+  const angle = rnd() * Math.PI * 2
+  const r = 44 + rnd() * 20
+  DRAGON.push(hp(Math.cos(angle) * r, -18 + Math.sin(angle) * r * 0.75, 0.15 + rnd() * 0.30, 0.006, 1.4))
+}
+
+// Neck (connects skull to body, slightly above center)
+for (let i = 0; i < 22; i++) {
+  const t = rnd()
+  const dx = (rnd() * 2 - 1) * (12 - t * 4)
+  const dy = -(50 + t * 35)
+  DRAGON.push(hp(dx, dy, 0.60 + rnd() * 0.30, 0.003, 0.5))
+}
+
+// ── DRAGON BODY — 460 particles along sinusoidal spine ──────────────────────
+// spineT: 0=right behind head, 1=tail tip
+// Position computed at render time from sine-wave spine
+
+const BODY_TOTAL = 460
+for (let i = 0; i < BODY_TOTAL; i++) {
+  // Non-uniform: cube-root pushes density toward front
+  const t = Math.pow(i / (BODY_TOTAL - 1), 1.4)
+
+  // Body width and straggler spread both taper toward tail
+  const bodyHalfW = BODY_MAX_HALF_W * Math.pow(1 - t, 0.65)
+  const stagSpread = BODY_STRAG_MAX  * Math.pow(1 - t, 0.85)
+
+  // Near front: 60% middle. Near tail: ~8%
+  const isMiddle = rnd() < 0.60 * Math.pow(1 - t, 0.55)
+
+  let perpOffset: number, a: number, lc: number, jAmp: number
 
   if (isMiddle) {
-    // Middle column particle — uniform across midHalfW
-    dx = (rnd() * 2 - 1) * midHalfW
-    // Opacity: high at front, fades toward back
-    a = (0.55 + rnd() * 0.25) * Math.pow(1 - t, 0.55)
+    perpOffset = (rnd() * 2 - 1) * bodyHalfW
+    a  = (0.55 + rnd() * 0.30) * Math.pow(1 - t, 0.50)
+    lc = 0.004 * (1 - t * 0.7)
+    jAmp = 0.7
   } else {
-    // Straggler — outside middle zone, up to stagMax
     const sign = rnd() > 0.5 ? 1 : -1
-    const innerEdge = midHalfW + 4
-    const outerEdge = innerEdge + stagMax
-    dx = sign * (innerEdge + rnd() * (outerEdge - innerEdge))
-    // Opacity: dimmer than middle, fades faster
-    a = (0.20 + rnd() * 0.20) * Math.pow(1 - t, 1.0)
+    perpOffset = sign * (bodyHalfW + 3 + rnd() * stagSpread)
+    a  = (0.18 + rnd() * 0.18) * Math.pow(1 - t, 0.90)
+    lc = 0.002 * (1 - t * 0.6)
+    jAmp = 1.5  // stragglers wiggle more
   }
 
-  METEOR.push({
-    dx, dy, a,
-    char: randChar(),
-    isHead: false,
-    ...jitterProps(isMiddle ? 0.8 : 1.4),  // stragglers wiggle more
-  })
+  DRAGON.push(bp(t, perpOffset, a, lc, jAmp))
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -274,7 +317,16 @@ export function IntroAnimation() {
   // Screensaver bounce
   const bouncePosRef = useRef({ x: 0, y: 0 })
   const bounceVelRef = useRef({ vx: BOUNCE_SPEED, vy: BOUNCE_SPEED * 0.75 })
-  const squishRef    = useRef({ x: 1, y: 1 })
+  const squishRef    = useRef({ x: 1, y: 1, vx: 0, vy: 0 })
+  const wallStateRef = useRef({
+    state: 'floating' as 'floating' | 'pressing' | 'releasing',
+    wall: 'left' as 'left' | 'right' | 'top' | 'bottom',
+    frame: 0,
+    entrySpeed: 0,
+    crossVel: 0,
+    cooldownWall: null as string | null,
+    cooldownFrames: 0,
+  })
 
   const [showTyping,   setShowTyping]   = useState(false)
   const [typedText,    setTypedText]    = useState('')
@@ -325,7 +377,8 @@ export function IntroAnimation() {
       vx: BOUNCE_SPEED * (Math.random() < 0.5 ? 1 : -1),
       vy: BOUNCE_SPEED * 0.75 * (Math.random() < 0.5 ? 1 : -1),
     }
-    squishRef.current = { x: 1, y: 1 }
+    squishRef.current = { x: 1, y: 1, vx: 0, vy: 0 }
+    wallStateRef.current = { state: 'floating', wall: 'left', frame: 0, entrySpeed: 0, crossVel: 0, cooldownWall: null, cooldownFrames: 0 }
   }
 
   // ── RAF loop ───────────────────────────────────────────────────────────────
@@ -379,27 +432,115 @@ export function IntroAnimation() {
         const bp = bouncePosRef.current
         const bv = bounceVelRef.current
         const sq = squishRef.current
-        bp.x += bv.vx
-        bp.y += bv.vy
+        const ws = wallStateRef.current
 
-        // Half-dims use squish multiplier — entire ZK compresses visibly
-        const halfW = (ZK_TOTAL_W / 2) * sq.x + 4
-        const halfH = (ZK_TOTAL_H / 2) * sq.y + 4
+        const nomHalfW = ZK_TOTAL_W / 2 + 4
+        const nomHalfH = ZK_TOTAL_H / 2 + 4
+        const isHoriz = ws.wall === 'left' || ws.wall === 'right'
 
-        if (bp.x - halfW < 0) { bv.vx =  Math.abs(bv.vx); bp.x = halfW;     sq.x = SQUISH_FACTOR }
-        if (bp.x + halfW > w) { bv.vx = -Math.abs(bv.vx); bp.x = w - halfW; sq.x = SQUISH_FACTOR }
-        if (bp.y - halfH < 0) { bv.vy =  Math.abs(bv.vy); bp.y = halfH;     sq.y = SQUISH_FACTOR }
-        if (bp.y + halfH > h) { bv.vy = -Math.abs(bv.vy); bp.y = h - halfH; sq.y = SQUISH_FACTOR }
+        // ── STATE: FLOATING — normal drift + jello wobble + collision check ─
+        if (ws.state === 'floating') {
+          bp.x += bv.vx
+          bp.y += bv.vy
 
-        // Spring back to normal
-        sq.x += (1 - sq.x) * SQUISH_SPRING
-        sq.y += (1 - sq.y) * SQUISH_SPRING
+          // Jello wobble (residual from previous bounce)
+          sq.vx += (1 - sq.x) * JELLO_K
+          sq.vx *= JELLO_D
+          sq.x  += sq.vx
+          sq.vy += (1 - sq.y) * JELLO_K
+          sq.vy *= JELLO_D
+          sq.y  += sq.vy
+
+          // Cooldown: prevent immediate re-trigger on same wall from jello wobble
+          if (ws.cooldownFrames > 0) ws.cooldownFrames--
+          else ws.cooldownWall = null
+
+          // Check wall collisions (edge of ZK reaches canvas boundary)
+          const hitL = bp.x - nomHalfW * sq.x <= 0 && ws.cooldownWall !== 'left'
+          const hitR = bp.x + nomHalfW * sq.x >= w && ws.cooldownWall !== 'right'
+          const hitT = bp.y - nomHalfH * sq.y <= 0 && ws.cooldownWall !== 'top'
+          const hitB = bp.y + nomHalfH * sq.y >= h && ws.cooldownWall !== 'bottom'
+
+          if (hitL || hitR || hitT || hitB) {
+            ws.state = 'pressing'
+            ws.frame = 0
+            ws.wall = hitL ? 'left' : hitR ? 'right' : hitT ? 'top' : 'bottom'
+            const hitH = hitL || hitR
+            ws.entrySpeed = Math.abs(hitH ? bv.vx : bv.vy)
+            ws.crossVel = hitH ? bv.vy : bv.vx
+            bv.vx = 0; bv.vy = 0
+            // Snap shape to 1.0 on entry so the press easing starts clean
+            sq.x = 1; sq.y = 1; sq.vx = 0; sq.vy = 0
+          }
+
+        // ── STATE: PRESSING — edge pinned to wall, squash deepens over time ─
+        } else if (ws.state === 'pressing') {
+          ws.frame++
+          const t = Math.min(1, ws.frame / PRESS_FRAMES)
+          // easeOutCubic: fast initial impact, decelerates to a stop at max squash
+          const ease = 1 - (1 - t) * (1 - t) * (1 - t)
+          const squash  = 1 - ease * (1 - SQUASH_DEPTH)
+          const stretch = 1 + (1 - squash) * COUPLE
+
+          if (isHoriz) {
+            sq.x = squash; sq.y = stretch
+            // Pin near edge to wall — center follows squash
+            bp.x = ws.wall === 'left' ? nomHalfW * squash : w - nomHalfW * squash
+          } else {
+            sq.y = squash; sq.x = stretch
+            bp.y = ws.wall === 'top' ? nomHalfH * squash : h - nomHalfH * squash
+          }
+
+          // Cross-axis continues sliding along wall
+          if (isHoriz) bp.y += ws.crossVel
+          else bp.x += ws.crossVel
+
+          if (t >= 1) { ws.state = 'releasing'; ws.frame = 0 }
+
+        // ── STATE: RELEASING — peel off wall, shape recovers, then jello kick ─
+        } else if (ws.state === 'releasing') {
+          ws.frame++
+          const t = Math.min(1, ws.frame / RELEASE_FRAMES)
+          // easeInCubic: slow peel, then accelerates off the wall
+          const ease = t * t * t
+          const squash  = SQUASH_DEPTH + ease * (1 - SQUASH_DEPTH)
+          const stretch = 1 + (1 - squash) * COUPLE
+
+          if (isHoriz) {
+            sq.x = squash; sq.y = stretch
+            bp.x = ws.wall === 'left' ? nomHalfW * squash : w - nomHalfW * squash
+          } else {
+            sq.y = squash; sq.x = stretch
+            bp.y = ws.wall === 'top' ? nomHalfH * squash : h - nomHalfH * squash
+          }
+
+          if (isHoriz) bp.y += ws.crossVel
+          else bp.x += ws.crossVel
+
+          if (t >= 1) {
+            // Reverse velocity — push off the wall
+            const speed = Math.max(BOUNCE_SPEED * 0.8, ws.entrySpeed * 0.85)
+            if (ws.wall === 'left')   { bv.vx =  speed; bv.vy = ws.crossVel }
+            if (ws.wall === 'right')  { bv.vx = -speed; bv.vy = ws.crossVel }
+            if (ws.wall === 'top')    { bv.vy =  speed; bv.vx = ws.crossVel }
+            if (ws.wall === 'bottom') { bv.vy = -speed; bv.vx = ws.crossVel }
+
+            // Jello kick — shape is at 1.0 but give it velocity to create wobble
+            sq.x = 1; sq.y = 1
+            if (isHoriz) { sq.vx = JELLO_KICK; sq.vy = -JELLO_KICK * 0.5 }
+            else         { sq.vy = JELLO_KICK; sq.vx = -JELLO_KICK * 0.5 }
+
+            // Cooldown so jello wobble doesn't re-trigger same wall
+            ws.cooldownWall = ws.wall
+            ws.cooldownFrames = 60
+            ws.state = 'floating'
+          }
+        }
 
         for (const p of particles) {
           p.displX *= (1 - WARP_SPRING)
           p.displY *= (1 - WARP_SPRING)
 
-          // Uniform squish: entire letter scales on the hit axis
           const baseX = bp.x + p.zkOffX * sq.x
           const baseY = bp.y + p.zkOffY * sq.y
 
@@ -454,7 +595,7 @@ export function IntroAnimation() {
       ctx.textAlign    = 'left'
       ctx.textBaseline = 'alphabetic'
 
-      // ── Portal canvas: Path B meteor scroll snake ────────────────────────
+      // ── Portal canvas: Path B dragon scroll creature ─────────────────────
       const sc = swarmCanvasRef.current?.getContext('2d')
       if (sc && swarmCanvasRef.current) {
         const vw = swarmCanvasRef.current.width
@@ -470,40 +611,90 @@ export function IntroAnimation() {
 
             if (introBottom < triggerPoint) {
               const scrollProg   = 1 - introBottom / triggerPoint
-              const snakeOpacity = Math.min(1, scrollProg * 3)
+              const opacity      = Math.min(1, scrollProg * 3)
               const headY = viewportH * 0.1 + scrollProg * viewportH * 0.25
-              const hx    = screenRectRef.current.sl + screenRectRef.current.sw * 0.2
+              const baseHx = screenRectRef.current.sl + screenRectRef.current.sw * 0.2
               const portalColor = isDark ? '#f0efe9' : '#0a0a0a'
+              const glowColor   = isDark ? 'rgba(255,185,80,0.65)' : 'rgba(255,120,40,0.55)'
+              const tSec = now / 1000
+
+              // Slither phase: shifts with scroll + slow time drift for living feel
+              const scrollPhase = scrollProg * WAVE_PHASE_SPEED + tSec * 0.35
+              // Phase at spine origin — subtract so body always starts at head position
+              const phaseAtHead = Math.sin(scrollPhase) * WAVE_AMP
+              // Gentle head sway (head also moves slightly left-right)
+              const hx = baseHx + Math.sin(scrollPhase * 0.4) * 12
+
+              // Trail length: how far above head the body extends
+              const trailLen = headY * 0.9
 
               sc.font         = `${FONT_SIZE}px "IBM Plex Mono", monospace`
               sc.textAlign    = 'center'
               sc.textBaseline = 'middle'
 
-              // Time for per-char jitter (seconds)
-              const tSec = now / 1000
+              // Update light timers for all particles this frame
+              for (const m of DRAGON) {
+                if (m.lightTimer > 0) {
+                  m.lightTimer--
+                } else if (rnd() < m.lightChance) {
+                  m.lightTimer = 8 + Math.floor(rnd() * 14)
+                }
+              }
 
-              // Render tail+mid first (behind), then head on top
-              for (const m of METEOR) {
+              // ── Render body first (behind head) ───────────────────────────
+              sc.shadowBlur = 0
+              for (const m of DRAGON) {
                 if (m.isHead) continue
-                const a = snakeOpacity * m.a
-                if (a < 0.01) continue
-                sc.globalAlpha = a
-                sc.fillStyle   = portalColor
+
+                const spineX = hx + Math.sin(m.spineT * Math.PI * 2 * WAVE_FREQ + scrollPhase) * WAVE_AMP - phaseAtHead
+                const spineY = headY - m.spineT * trailLen
+
                 const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX
                 const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY
-                sc.fillText(m.char, hx + m.dx + jx, headY + m.dy * headY + jy)
-              }
-              for (const m of METEOR) {
-                if (!m.isHead) continue
-                const a = snakeOpacity * m.a
-                if (a < 0.01) continue
-                sc.globalAlpha = a
-                sc.fillStyle   = portalColor
-                const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX * 0.5
-                const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY * 0.5
-                sc.fillText(m.char, hx + m.dx + jx, headY + m.dy + jy)
+                const px = spineX + m.perpOffset + jx
+                const py = spineY + jy
+
+                // Opacity fades toward tail
+                const alpha = opacity * m.a * Math.pow(1 - m.spineT, 0.4)
+                if (alpha < 0.01) continue
+
+                if (m.lightTimer > 0) {
+                  sc.shadowBlur  = 7
+                  sc.shadowColor = glowColor
+                  sc.globalAlpha = Math.min(1, alpha * 1.6)
+                } else {
+                  sc.shadowBlur  = 0
+                  sc.globalAlpha = alpha
+                }
+                sc.fillStyle = portalColor
+                sc.fillText(m.char, px, py)
               }
 
+              // ── Render head on top ────────────────────────────────────────
+              for (const m of DRAGON) {
+                if (!m.isHead) continue
+
+                const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX * 0.5
+                const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY * 0.5
+                const px = hx + m.dx + jx
+                const py = headY + m.dy + jy
+
+                const alpha = opacity * m.a
+                if (alpha < 0.01) continue
+
+                if (m.lightTimer > 0) {
+                  sc.shadowBlur  = 8
+                  sc.shadowColor = glowColor
+                  sc.globalAlpha = Math.min(1, alpha * 1.7)
+                } else {
+                  sc.shadowBlur  = 0
+                  sc.globalAlpha = alpha
+                }
+                sc.fillStyle = portalColor
+                sc.fillText(m.char, px, py)
+              }
+
+              sc.shadowBlur   = 0
               sc.globalAlpha  = 1
               sc.textAlign    = 'left'
               sc.textBaseline = 'alphabetic'
