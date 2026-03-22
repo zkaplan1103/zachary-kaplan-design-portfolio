@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { motion } from 'framer-motion'
 import { useUIStore } from '@/store/uiStore'
 import { BEZEL } from '@/config/bezel'
+import { createDragon, updateDragon, getSpinePointAt, BODY_SPINE_START } from '@/components/swarm/dragonEngine'
 
 // ─── Programmatic grid generation (smooth diagonals via interpolation) ───────
 
@@ -155,9 +156,9 @@ interface DragonPart {
   // Head: absolute px offsets from head center
   dx: number
   dy: number
-  // Body: spine-relative (rendered at runtime from sine-wave spine)
+  // Body: spine-relative (rendered at runtime from FABRIK spine chain)
   spineT: number       // 0 = near head, 1 = far tail
-  perpOffset: number   // px left/right from spine
+  perpOffset: number   // px perpendicular from spine
   // Shared
   a: number
   char: string
@@ -168,12 +169,6 @@ interface DragonPart {
   lightTimer: number   // frames remaining "lit" (mutable per frame)
   lightChance: number  // probability per frame of igniting
 }
-
-// Slithering body constants
-const WAVE_AMP          = 42   // px amplitude of sine slither
-const WAVE_FREQ         = 2.8  // S-curves across full body
-const WAVE_PHASE_SPEED  = 7    // how fast wave shifts with scroll (slither speed)
-const NECK_OFFSET       = 75   // px behind head where body originates
 
 const DRAGON: DragonPart[] = []
 
@@ -253,6 +248,22 @@ for (let i = 0; i < 5; i++) {
 // Right eye pupil — same, mirrored
 for (let i = 0; i < 5; i++) {
   DRAGON.push(hp(18 + (rnd() - 0.5) * 8, -28 + (rnd() - 0.5) * 5, 0.95, 0.04, 0.15))
+}
+
+// Brow ridge — thickened rows above each eye socket, inner corners lower (scowl)
+for (let i = 0; i < 12; i++) {
+  // Left brow: curves from (-28, -33) inner-low to (-8, -36) outer-high
+  const t = i / 11
+  const bx = -28 + t * 20
+  const by = -33 - t * 3 + (rnd() - 0.5) * 3 // inner lower, outer higher
+  DRAGON.push(hp(bx + (rnd() - 0.5) * 4, by, 0.75 + rnd() * 0.20, 0.004, 0.35))
+}
+for (let i = 0; i < 12; i++) {
+  // Right brow: mirrored, curves from (8, -36) inner-low to (28, -33) outer-high
+  const t = i / 11
+  const bx = 8 + t * 20
+  const by = -36 + t * 3 + (rnd() - 0.5) * 3
+  DRAGON.push(hp(bx + (rnd() - 0.5) * 4, by, 0.75 + rnd() * 0.20, 0.004, 0.35))
 }
 
 // Skull fringe / scale wisps around perimeter
@@ -358,8 +369,9 @@ export function IntroAnimation() {
   const screenRectRef  = useRef<ScreenRect>(computeScreenRect())
   const [screenDims, setScreenDims] = useState<ScreenRect>(() => computeScreenRect())
 
-  // Dragon head rotation (spring-interpolated toward spine tangent angle)
-  const headAngleRef = useRef(0)
+  // Dragon spine engine (FABRIK chain — powers all dragon movement)
+  const dragonStateRef = useRef(createDragon())
+  const lastFrameRef   = useRef(0)
 
   // Screensaver bounce
   const bouncePosRef = useRef({ x: 0, y: 0 })
@@ -665,30 +677,20 @@ export function IntroAnimation() {
               const glowColor   = isDark ? 'rgba(255,185,80,0.65)' : 'rgba(255,120,40,0.55)'
               const tSec = now / 1000
 
-              // Slither phase: shifts with scroll + slow time drift for living feel
-              const scrollPhase = scrollProg * WAVE_PHASE_SPEED + tSec * 0.35
-              // Phase at spine origin — subtract so body always starts at head position
-              const phaseAtHead = Math.sin(scrollPhase) * WAVE_AMP
-              // Gentle head sway (head also moves slightly left-right)
-              const hx = baseHx + Math.sin(scrollPhase * 0.4) * 12
+              // ── Dragon engine update ──────────────────────────────────
+              // Compute head target from scroll state
+              const hx = baseHx + Math.sin(tSec * 0.4) * 12
+              const dt = lastFrameRef.current ? (now - lastFrameRef.current) / 1000 : 1 / 60
+              lastFrameRef.current = now
 
-              // Trail length: how far above head the body extends
-              const trailLen = headY * 0.9
+              // Update FABRIK spine — head chases target, body follows
+              updateDragon(dragonStateRef.current, hx, headY, dt)
 
-              // Head rotation — spring toward spine tangent angle at t=0
-              // d/dt[sin(t*2π*FREQ+phase)] at t=0 = cos(phase)*2π*FREQ*AMP
-              const targetAngle = Math.atan2(
-                Math.cos(scrollPhase) * Math.PI * 2 * WAVE_FREQ * WAVE_AMP,
-                trailLen,
-              )
-              headAngleRef.current += (targetAngle - headAngleRef.current) * 0.12
-              const headAngle = headAngleRef.current
+              const ds = dragonStateRef.current
+              const headPt = ds.spine[0]
+              const headAngle = headPt.angle + ds.headRoll
               const cos_a = Math.cos(headAngle)
               const sin_a = Math.sin(headAngle)
-
-              // Body originates ~75px behind head along neck direction
-              const bodyOriginX = hx - sin_a * NECK_OFFSET
-              const bodyOriginY = headY - cos_a * NECK_OFFSET
 
               sc.font         = `${FONT_SIZE}px "IBM Plex Mono", monospace`
               sc.textAlign    = 'center'
@@ -704,17 +706,21 @@ export function IntroAnimation() {
               }
 
               // ── Render body first (behind head) ───────────────────────────
+              // Body particles positioned along FABRIK spine with perpendicular offset
               sc.shadowBlur = 0
               for (const m of DRAGON) {
                 if (m.isHead) continue
 
-                const spineX = bodyOriginX + Math.sin(m.spineT * Math.PI * 2 * WAVE_FREQ + scrollPhase) * WAVE_AMP - phaseAtHead
-                const spineY = bodyOriginY - m.spineT * trailLen
+                // Get spine position + angle at this particle's spineT
+                const sp = getSpinePointAt(ds, m.spineT, BODY_SPINE_START)
+                // Perpendicular to spine direction
+                const perpX = -Math.sin(sp.angle)
+                const perpY =  Math.cos(sp.angle)
 
                 const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX
                 const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY
-                const px = spineX + m.perpOffset + jx
-                const py = spineY + jy
+                const px = sp.x + m.perpOffset * perpX + jx
+                const py = sp.y + m.perpOffset * perpY + jy
 
                 const alpha = opacity * m.a
                 if (alpha < 0.01) continue
@@ -731,7 +737,7 @@ export function IntroAnimation() {
                 sc.fillText(m.char, px, py)
               }
 
-              // ── Render head on top — rotated to align with body direction ─
+              // ── Render head on top — rotated by spine[0] angle ──────────
               for (const m of DRAGON) {
                 if (!m.isHead) continue
 
@@ -740,8 +746,8 @@ export function IntroAnimation() {
                 const rdy = m.dx * sin_a + m.dy * cos_a
                 const jx = Math.sin(tSec * m.jitterSpeed + m.jitterPhase) * m.jitterAmpX * 0.5
                 const jy = Math.cos(tSec * m.jitterSpeed * 0.8 + m.jitterPhase) * m.jitterAmpY * 0.5
-                const px = hx + rdx + jx
-                const py = headY + rdy + jy
+                const px = headPt.x + rdx + jx
+                const py = headPt.y + rdy + jy
 
                 const alpha = opacity * m.a
                 if (alpha < 0.01) continue
