@@ -170,12 +170,17 @@ export function IntroAnimation() {
   const [screenDims, setScreenDims] = useState<ScreenRect>(() => computeScreenRect())
 
   // Snake grid renderer state
-  const headYBufferRef    = useRef<number[]>([])           // 6-frame rolling scroll velocity buffer
-  const headAngleRef      = useRef(Math.PI / 2)            // lerped head angle (π/2 = snout down)
-  const lightMapRef       = useRef(new Map<string, number>()) // per-cell light timers
-  const frameCountRef     = useRef(0)
-  const snakePhaseRef     = useRef(0)                      // accumulated slither phase
-  const prevScrollProgRef = useRef(0)                      // previous scrollProg for delta
+  const headYBufferRef       = useRef<number[]>([])              // 6-frame rolling scroll velocity buffer
+  const headAngleRef         = useRef(Math.PI / 2)               // lerped head angle (π/2 = snout down)
+  const lightMapRef          = useRef(new Map<string, number>()) // per-cell light timers
+  const frameCountRef        = useRef(0)
+  const snakePhaseRef        = useRef(0)                         // accumulated slither phase
+  const prevScrollYRef       = useRef(0)                         // previous window.scrollY for velocity
+  // Tongue flick state
+  const tongueFlickRef       = useRef(false)
+  const flickStartRef        = useRef(0)
+  const lastFlickTimeRef     = useRef(0)
+  const nextFlickIntervalRef = useRef(3000 + Math.random() * 2000)
 
   // Screensaver bounce
   const bouncePosRef = useRef({ x: 0, y: 0 })
@@ -483,31 +488,29 @@ export function IntroAnimation() {
               const tSec        = now / 1000
               const frame       = frameCountRef.current++
 
-              // ── CHANGE 1: Slither phase — persistent accumulator ──────
-              // Phase advance: 0.018/frame (wave takes ~350 frames per cycle)
-              // Scroll contribution scaled to 0.4 × delta
-              const scrollDelta = scrollProg - prevScrollProgRef.current
-              prevScrollProgRef.current = scrollProg
-              snakePhaseRef.current += 0.018 + scrollDelta * 0.4
+              // ── FIX 3: Phase only advances with scroll velocity ───────
+              const scrollVelocity = Math.abs(window.scrollY - prevScrollYRef.current)
+              prevScrollYRef.current = window.scrollY
+              if (scrollVelocity > 0.5) {
+                snakePhaseRef.current += 0.018 * Math.min(scrollVelocity * 0.3, 3.0)
+              }
               const snakePhase = snakePhaseRef.current
 
               const hx = baseHx + Math.sin(tSec * 0.4) * 60
 
-              // ── Head angle from 6-frame scroll velocity buffer ────────
+              // ── Head angle: tracks scroll direction, holds still when idle ──
               const buf = headYBufferRef.current
               buf.push(headY)
               if (buf.length > 6) buf.shift()
               const scrollVel = buf.length >= 2 ? buf[buf.length - 1] - buf[0] : 0
-              let targetAngle: number
-              if (scrollVel > 3) {
-                targetAngle = Math.PI / 2           // snout points down
-              } else if (scrollVel < -3) {
-                targetAngle = -Math.PI / 2          // snout points up
-              } else {
-                // gentle idle bob — nudge current angle, don't jump
-                targetAngle = headAngleRef.current + Math.sin(tSec * 0.7) * (10 * Math.PI / 180)
+              if (scrollVelocity > 0.5) {
+                const targetAngle =
+                  scrollVel > 3  ? Math.PI / 2 :
+                  scrollVel < -3 ? -Math.PI / 2 :
+                  headAngleRef.current
+                headAngleRef.current += (targetAngle - headAngleRef.current) * 0.07
               }
-              headAngleRef.current += (targetAngle - headAngleRef.current) * 0.07
+              // When idle: headAngle holds, no bob
               const headAngle = headAngleRef.current
 
               const lights = lightMapRef.current
@@ -516,30 +519,33 @@ export function IntroAnimation() {
               sc.textAlign    = 'center'
               sc.textBaseline = 'middle'
 
-              // ── Inline spine (CHANGE 1: negative phase + 1.3× amplitude) ──
-              // FROM: sin(dy*0.05 + phase)*80 + sin(dy*0.02)*40
-              // TO:   sin(dy*0.05 - phase)*104 + sin(dy*0.02 - phase*0.6)*52
+              // ── Spine (negative phase = forward slither, amplitude ×1.3) ──
               function spineX(dy: number): number {
                 return (
                   Math.sin(dy * 0.05 - snakePhase) * 104 +
                   Math.sin(dy * 0.02 - snakePhase * 0.6) * 52
                 )
               }
+
+              // ── FIX 2: Body origin at head back edge, not head center ──
+              // Scaled back edge: -12 * 0.65 = -7.8 grid cells = 54.6 px
+              const backEdgePx  = 7.8 * CELL_W  // 54.6 px
+              const bodyOriginX = hx   - Math.cos(headAngle) * backEdgePx
+              const bodyOriginY = headY - Math.sin(headAngle) * backEdgePx
+
               function spineAt(t: number): { x: number; y: number } {
                 const dy = t * BODY_LENGTH
-                return { x: hx + spineX(dy), y: headY - dy }
+                return { x: bodyOriginX + spineX(dy), y: bodyOriginY - dy }
               }
               function normalAt(t: number): { nx: number; ny: number } {
                 const eps = 0.002
-                const t1 = Math.max(0, t - eps), t2 = Math.min(1, t + eps)
-                const p1 = spineAt(t1), p2 = spineAt(t2)
+                const p1 = spineAt(Math.max(0, t - eps)), p2 = spineAt(Math.min(1, t + eps))
                 const dx = p2.x - p1.x, dy = p2.y - p1.y
                 const len = Math.sqrt(dx * dx + dy * dy)
                 if (len === 0) return { nx: 1, ny: 0 }
-                return { nx: dy / len, ny: -dx / len } // perpendicular to tangent
+                return { nx: dy / len, ny: -dx / len }
               }
 
-              // Body opacity — piecewise from spec
               function bodyOp(t: number): number {
                 if (t <= 0.00) return 0.90
                 if (t <  0.30) return 0.90 + (t / 0.30) * (0.75 - 0.90)
@@ -550,16 +556,11 @@ export function IntroAnimation() {
                 return 0.03
               }
 
-              // Character zones — same density bands as before
-              const CC = ['@','W','M','#']
-              const IC = ['X','H','x','V']
-              const MC = ['v','i',':',';']
-              const OC = ['.',',','`',"'"]
-              const FC = ['.',' ']
-              const SC_CHARS = ['S',')','(']
+              const CC = ['@','W','M','#'], IC = ['X','H','x','V']
+              const MC = ['v','i',':',';'], OC = ['.',',','`',"'"]
+              const FC = ['.',' '],         SC_CHARS = ['S',')','(']
 
               function charForBody(d: number, seed: number, si: number, ci: number): string {
-                // Scale texture: every 6th core cell, slow flip (200–400 frames)
                 if (d < 0.30 && (si * 7 + Math.abs(ci) * 13) % 6 === 0) {
                   const flip = 200 + ((si * 17 + Math.abs(ci) * 31) % 201)
                   return SC_CHARS[Math.abs(Math.floor((frame + si * 37 + ci * 59) / flip)) % 3]
@@ -576,7 +577,7 @@ export function IntroAnimation() {
                 return 0.001
               }
 
-              // ── CHANGE 2: Render body ─────────────────────────────────
+              // ── Render body ───────────────────────────────────────────
               for (let si = 0; si < SNAKE_SAMPLES; si++) {
                 const t = si / (SNAKE_SAMPLES - 1)
                 const sp = spineAt(t)
@@ -587,21 +588,18 @@ export function IntroAnimation() {
                 for (let ci = -cellR; ci <= cellR; ci++) {
                   const d = Math.abs(ci) / Math.max(1, halfW)
                   if (d > 1.0) continue
-
                   const px    = sp.x + nx * ci * CELL_W
                   const py    = sp.y + ny * ci * CELL_H
                   const seed  = cellSeed(si, ci, frame)
                   const char  = charForBody(d, seed, si, ci)
                   const alpha = snakeAlpha * bodyOp(t) * Math.pow(Math.max(0, 1 - d), 1.3)
                   if (alpha < 0.01) continue
-
                   const key = `b${si},${ci}`
                   let lit = lights.get(key) ?? 0
                   if (lit > 0) { lit--; lights.set(key, lit) }
                   else if (Math.random() < snakeLightChance(t, false)) {
                     lit = 8 + Math.floor(Math.random() * 14); lights.set(key, lit)
                   }
-
                   sc.shadowBlur  = lit > 0 ? 7 : 0
                   sc.shadowColor = glowColor
                   sc.globalAlpha = lit > 0 ? Math.min(1, alpha * 1.6) : alpha
@@ -610,15 +608,14 @@ export function IntroAnimation() {
                 }
               }
 
-              // ── CHANGE 2: Render head — top-down pentagon ────────────
-              // headAngle = direction snout points. ctx.rotate so "right" = snout direction.
+              // ── FIX 1: Render head — scaled pentagon (×0.65) ─────────
               sc.save()
               sc.translate(hx, headY)
-              sc.rotate(headAngle)  // head-local: right (+x) = snout direction
+              sc.rotate(headAngle)
 
-              // Pentagon vertices in head-local grid cell coords (facing right)
+              // All head coords scaled ×0.65: back=-7.8, snout=8.5, rows±6.5/±8.5
               const PENTA: [number, number][] = [
-                [-12,-10],[-4,-13],[8,-6],[13,0],[8,6],[-4,13],[-12,10]
+                [-7.8,-6.5],[-2.6,-8.5],[5.2,-3.9],[8.5,0],[5.2,3.9],[-2.6,8.5],[-7.8,6.5]
               ]
               function inPentagon(col: number, row: number): boolean {
                 let inside = false
@@ -632,35 +629,59 @@ export function IntroAnimation() {
                 return inside
               }
 
-              // Eye zone test: 'eye' = inside oval, 'void' = 1.5× gap, null = neither
+              // Eyes ×0.65: centers at (-1.3, ±3.9), oval axes (1.3, 0.65), void 1.5×
               function eyeZone(col: number, row: number, sign: number): 'eye' | 'void' | null {
-                const ec = [-2, sign * 6] as [number, number]
-                const er = (col - ec[0]) ** 2 / 4 + (row - ec[1]) ** 2
-                if (er <= 1) return 'eye'
-                const vr = (col - ec[0]) ** 2 / 9 + (row - ec[1]) ** 2 / 2.25
-                if (vr <= 1) return 'void'
+                const ecx = -1.3, ecy = sign * 3.9
+                if ((col-ecx)**2/(1.3**2) + (row-ecy)**2/(0.65**2) <= 1) return 'eye'
+                if ((col-ecx)**2/(1.95**2) + (row-ecy)**2/(0.975**2) <= 1) return 'void'
                 return null
               }
 
-              // Tongue: forked from snout tip at (13,0) to (16,±2)
-              const TONGUE: [number, number, string][] = [
-                [14,-1,'-'],[15,-1,'~'],[16,-2,'='],
-                [14, 1,'-'],[15, 1,'~'],[16, 2,'='],
-              ]
-
-              // Neck bridge: columns -22 to -13, tapering from head back edge
-              function inNeckBridge(col: number, row: number): boolean {
-                if (col < -22 || col > -13) return false
-                const halfH = 10 * ((col + 22) / 9)
-                return Math.abs(row) <= halfH
+              // ── FIX 3: Tongue flick (every 3–5s, extends over 400ms) ─
+              if (!tongueFlickRef.current &&
+                  now - lastFlickTimeRef.current > nextFlickIntervalRef.current) {
+                tongueFlickRef.current = true
+                flickStartRef.current  = now
+                nextFlickIntervalRef.current = 3000 + Math.random() * 2000
+              }
+              let flickAmt = 0
+              if (tongueFlickRef.current) {
+                flickAmt = Math.sin((now - flickStartRef.current) / 400 * Math.PI)
+                if (now - flickStartRef.current >= 400) {
+                  tongueFlickRef.current = false
+                  lastFlickTimeRef.current = now
+                  flickAmt = 0
+                }
               }
 
-              for (let row = -15; row <= 15; row++) {
-                for (let col = -22; col <= 17; col++) {
+              // Base tongue: 2 chars per fork. Extra 2 chars per fork when flicking.
+              // Scaled snout at col≈8.5 → tongue starts at col 9.
+              const BASE_TONGUE: [number, number, string][] = [
+                [9,-1,'-'],[10,-1,'~'],
+                [9, 1,'-'],[10, 1,'~'],
+              ]
+              const FLICK_TONGUE: [number, number, string][] = [
+                [11,-2,'='],[12,-2,'='],
+                [11, 2,'='],[12, 2,'='],
+              ]
+              const TONGUE: [number, number, string][] =
+                flickAmt > 0.3 ? [...BASE_TONGUE, ...FLICK_TONGUE] : BASE_TONGUE
+
+              // Neck bridge ×0.65: col -14 to -9, halfH tapers 0→6.5
+              function inNeckBridge(col: number, row: number): boolean {
+                if (col < -14 || col > -9) return false
+                return Math.abs(row) <= 6.5 * ((col + 14) / 5)
+              }
+
+              // Scan range: scaled pentagon (-15→13 col, -10→10 row)
+              for (let row = -10; row <= 10; row++) {
+                for (let col = -15; col <= 13; col++) {
+
                   // ── Tongue ──
                   const te = TONGUE.find(([tc,tr]) => tc === col && tr === row)
                   if (te) {
-                    const tongueA = snakeAlpha * (0.6 + 0.2 * Math.sin(tSec * 3 + row))
+                    const tongueA = snakeAlpha * (0.6 + 0.2 * Math.sin(tSec * 3 + row)) *
+                      (flickAmt > 0 ? (0.7 + flickAmt * 0.3) : 1)
                     const tk = `tg${col},${row}`
                     let lit = lights.get(tk) ?? 0
                     if (lit > 0) { lit--; lights.set(tk, lit) }
@@ -676,28 +697,26 @@ export function IntroAnimation() {
                   // ── Eye zones ──
                   const lz = eyeZone(col, row, -1)
                   const rz = eyeZone(col, row, +1)
-                  if (lz === 'void' || rz === 'void') continue // gap around eye
+                  if (lz === 'void' || rz === 'void') continue
 
-                  // ── Eye fill ──
                   if (lz === 'eye' || rz === 'eye') {
                     const ek = `ey${col},${row}`
                     let lit = lights.get(ek) ?? 0
                     if (lit > 0) { lit--; lights.set(ek, lit) }
                     else if (Math.random() < 0.07) { lit = 8 + Math.floor(Math.random()*12); lights.set(ek, lit) }
-                    const eyeChars = ['O','o','@']
                     const seed = cellSeed(col + 300, row + 300, frame)
                     sc.shadowBlur  = 8
                     sc.shadowColor = glowColor
                     sc.globalAlpha = snakeAlpha
                     sc.fillStyle   = eyeColor
-                    sc.fillText(eyeChars[Math.abs(Math.floor(seed*97))%3], col*CELL_W, row*CELL_H)
+                    sc.fillText(['O','o','@'][Math.abs(Math.floor(seed*97))%3], col*CELL_W, row*CELL_H)
                     continue
                   }
 
                   // ── Skull / neck bridge ──
                   if (!inPentagon(col, row) && !inNeckBridge(col, row)) continue
 
-                  const distR = Math.sqrt(col**2 + row**2) / 14
+                  const distR = Math.sqrt(col**2 + row**2) / 9
                   const d     = Math.min(1, distR)
                   const seed  = cellSeed(col + 50, row + 50, frame)
                   const arr   = d < 0.3 ? CC : d < 0.6 ? IC : d < 0.85 ? MC : OC
@@ -711,7 +730,6 @@ export function IntroAnimation() {
                   else if (Math.random() < (d < 0.3 ? 0.018 : 0.006)) {
                     lit = 8 + Math.floor(Math.random() * 14); lights.set(hk, lit)
                   }
-
                   sc.shadowBlur  = lit > 0 ? 8 : 0
                   sc.shadowColor = glowColor
                   sc.globalAlpha = lit > 0 ? Math.min(1, alpha * 1.7) : alpha
