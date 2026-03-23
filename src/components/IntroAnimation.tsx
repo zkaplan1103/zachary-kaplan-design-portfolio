@@ -144,13 +144,48 @@ const SNAKE_SAMPLES    = 100          // spaced out to prevent character overlap
 const SNAKE_MAX_W      = 8
 const SPINE_PTS        = 300
 const SEG_LEN          = BODY_LENGTH / (SPINE_PTS - 1)
-const IDLE_BEFORE_COIL = 50
-const COIL_LIN_SPEED   = 1.2        // slow, graceful coil rotation
-const START_COIL_R     = 80
-const MIN_COIL_R       = 42          // bigger coil — visible gap in center
-const COIL_SHRINK_RATE = 0.1         // slow tightening
-const MAX_COIL_ANG_SPD = 0.03        // cap angular speed at small radii
 const BODY_START_T     = 0.12         // body rendering starts past head/neck zone
+
+// COIL STATE DISABLED FOR PATH-FOLLOWER MODE
+// Re-enable if design direction changes
+// See LIVING MEMORY for coil state machine code
+// const IDLE_BEFORE_COIL = 50
+// const COIL_LIN_SPEED   = 1.2
+// const START_COIL_R     = 80
+// const MIN_COIL_R       = 42
+// const COIL_SHRINK_RATE = 0.1
+// const MAX_COIL_ANG_SPD = 0.03
+
+// ─── SVG path-follower helpers ────────────────────────────────────────────────
+
+/** Build SVG cubic bezier d-string from BEZEL config × viewport size. */
+function computePathD(): string {
+  const vw = window.innerWidth / 100
+  const vh = window.innerHeight / 100
+  const sl = BEZEL.screen.left * vw
+  const st = BEZEL.screen.top * vh
+  const sw = BEZEL.screen.width * vw
+  const sh = BEZEL.screen.height * vh
+
+  const startX = sl + sw + 20
+  const startY = st + sh * 0.82
+  const cp1x   = sl + sw * 0.65
+  const cp1y   = st + sh * 0.75
+  const cp2x   = sl + sw * 0.35
+  const cp2y   = st + sh * 0.89
+  const endX   = sl - 20
+  const endY   = st + sh * 0.82
+
+  return `M ${startX} ${startY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${endX} ${endY}`
+}
+
+/** Visibility envelope: fade in 0→0.05, full 0.05→0.95, fade out 0.95→1. */
+function snakeVisibility(progress: number): number {
+  if (progress <= 0 || progress >= 1) return 0
+  if (progress < 0.05) return progress / 0.05
+  if (progress > 0.95) return (1 - progress) / 0.05
+  return 1
+}
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -188,16 +223,13 @@ export function IntroAnimation() {
 
   // Snake trail chain + renderer state
   const snakeSpineRef        = useRef<{x: number; y: number}[]>([])
-  const snakeModeRef         = useRef<'scroll' | 'coiling' | 'coiled'>('scroll')
-  const idleFramesRef        = useRef(0)
-  const prevScrollProgRef    = useRef(0)
-  const coilCenterRef        = useRef({ x: 0, y: 0 })
-  const coilAngleRef         = useRef(0)
-  const coilRadiusRef        = useRef(START_COIL_R)
-  const oscAmpRef            = useRef(75)
-  const headAngleRef         = useRef(Math.PI / 2)
+  const headAngleRef         = useRef(Math.PI)    // facing left (path goes right→left)
   const lightMapRef          = useRef(new Map<string, number>())
   const frameCountRef        = useRef(0)
+  // SVG path-follower refs
+  const svgPathRef           = useRef<SVGPathElement | null>(null)
+  const svgTotalLengthRef    = useRef(0)
+  const prevPathProgressRef  = useRef(0)
   // Tongue flick state
   const tongueFlickRef       = useRef(false)
   const flickStartRef        = useRef(0)
@@ -294,12 +326,41 @@ export function IntroAnimation() {
       if (phaseRef.current === 'screensaver') {
         bouncePosRef.current = { x: rect.sw / 2, y: rect.sh / 2 }
       }
+
+      // Update SVG path on resize (viewport-relative coords change)
+      if (svgPathRef.current) {
+        svgPathRef.current.setAttribute('d', computePathD())
+        svgTotalLengthRef.current = svgPathRef.current.getTotalLength()
+        snakeSpineRef.current.length = 0  // reset spine for new path
+        const parentSvg = svgPathRef.current.ownerSVGElement
+        if (parentSvg) {
+          parentSvg.setAttribute('width', String(window.innerWidth))
+          parentSvg.setAttribute('height', String(window.innerHeight))
+        }
+      }
     }
 
     resize()
     window.addEventListener('resize', resize)
     initParticles(canvas.width, canvas.height)
     phaseRef.current = 'screensaver'
+
+    // ── Create hidden SVG for path-follower math ──────────────────────────
+    const svgNS = 'http://www.w3.org/2000/svg'
+    const svg = document.createElementNS(svgNS, 'svg')
+    svg.setAttribute('width', String(window.innerWidth))
+    svg.setAttribute('height', String(window.innerHeight))
+    Object.assign(svg.style, {
+      position: 'fixed', inset: '0',
+      width: '100vw', height: '100vh',
+      pointerEvents: 'none', visibility: 'hidden',
+    })
+    const pathEl = document.createElementNS(svgNS, 'path')
+    pathEl.setAttribute('d', computePathD())
+    svg.appendChild(pathEl)
+    document.body.appendChild(svg)
+    svgPathRef.current = pathEl
+    svgTotalLengthRef.current = pathEl.getTotalLength()
 
     const ctx = canvas.getContext('2d')!
     ctx.imageSmoothingEnabled = false
@@ -485,7 +546,7 @@ export function IntroAnimation() {
       ctx.textAlign    = 'left'
       ctx.textBaseline = 'alphabetic'
 
-      // ── Portal canvas: Path B snake scroll creature (top-down grid renderer) ──
+      // ── Portal canvas: SVG path-follower snake ─────────────────────────────
       const sc = swarmCanvasRef.current?.getContext('2d')
       if (sc && swarmCanvasRef.current) {
         const vw = swarmCanvasRef.current.width
@@ -494,108 +555,64 @@ export function IntroAnimation() {
 
         if (phase === 'screensaver') {
           const sectionEl = canvasRef.current?.parentElement
-          if (sectionEl) {
-            const introBottom  = sectionEl.getBoundingClientRect().bottom
-            const viewportH    = window.innerHeight
-            const triggerPoint = viewportH * 0.5
+          const svgPath   = svgPathRef.current
+          const pathLen   = svgTotalLengthRef.current
 
-            if (introBottom < triggerPoint) {
-              const scrollProg  = 1 - introBottom / triggerPoint
-              const snakeAlpha  = Math.min(1, scrollProg * 3)
-              const baseHeadY   = viewportH * 0.1 + scrollProg * viewportH * 0.25
-              const baseHx      = screenRectRef.current.sl + screenRectRef.current.sw * 0.5
+          if (sectionEl && svgPath && pathLen > 0) {
+            const introBottom = sectionEl.getBoundingClientRect().bottom
+            const viewportH   = window.innerHeight
+            const triggerStart = viewportH * 0.9
+            const triggerEnd   = viewportH * 0.1
+
+            const rawProgress  = (introBottom - triggerStart) / (triggerEnd - triggerStart)
+            const pathProgress = Math.max(0, Math.min(1, rawProgress))
+            const opacity      = snakeVisibility(pathProgress)
+
+            // Reset spine when snake is fully hidden
+            if (opacity <= 0.01) {
+              if (snakeSpineRef.current.length > 0) snakeSpineRef.current.length = 0
+            } else {
+              // ── Head position from SVG path ──────────────────────────
+              const dist   = pathProgress * pathLen
+              const headPt = svgPath.getPointAtLength(dist)
+              const hx     = headPt.x
+              const headY  = headPt.y
+
+              // ── Head angle from path tangent + scroll direction ──────
+              const p1 = svgPath.getPointAtLength(Math.max(0, dist - 2))
+              const p2 = svgPath.getPointAtLength(Math.min(pathLen, dist + 2))
+              const tangentAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x)
+              const scrollDir = pathProgress >= prevPathProgressRef.current ? 1 : -1
+              prevPathProgressRef.current = pathProgress
+              // When scrolling forward (right→left), tangent points left — correct.
+              // When scrolling backward, flip 180° so head faces direction of travel.
+              const targetAngle = scrollDir > 0 ? tangentAngle : tangentAngle + Math.PI
+              headAngleRef.current += angleDiff(targetAngle, headAngleRef.current) * 0.2
+              const headAngle = headAngleRef.current
+
+              // ── Colors / timing ─────────────────────────────────────
               const portalColor = isDark ? '#f0efe9' : '#0a0a0a'
               const eyeColor    = isDark ? 'rgba(255,248,230,1)' : 'rgba(80,60,0,1)'
               const glowColor   = isDark ? 'rgba(255,185,80,0.65)' : 'rgba(255,120,40,0.55)'
               const tSec        = now / 1000
               const frame       = frameCountRef.current++
+              const lights      = lightMapRef.current
 
-              // ── Detect scroll vs idle via scrollProg delta ─────────────
-              const scrollDelta = Math.abs(scrollProg - prevScrollProgRef.current)
-              prevScrollProgRef.current = scrollProg
-              const isScrolling = scrollDelta > 0.0003
-              const lights = lightMapRef.current
-
-              // ── Initialize spine chain on first frame ──────────────────
+              // ── Initialize spine chain along path ───────────────────
               const spine = snakeSpineRef.current
               if (spine.length === 0) {
                 for (let i = 0; i < SPINE_PTS; i++) {
-                  spine.push({ x: baseHx, y: baseHeadY - i * SEG_LEN })
+                  const trailDist = Math.max(0, dist - i * SEG_LEN)
+                  const pt = svgPath.getPointAtLength(trailDist)
+                  spine.push({ x: pt.x, y: pt.y })
                 }
               }
 
-              // ── Compute head target based on mode ──────────────────────
-              let hx: number
-              let headY: number
-              const prevMode = snakeModeRef.current
+              // Set head to path position (path is already smooth — no lerp needed)
+              spine[0].x = hx
+              spine[0].y = headY
 
-              if (isScrolling) {
-                snakeModeRef.current = 'scroll'
-                idleFramesRef.current = 0
-                coilRadiusRef.current = START_COIL_R
-                oscAmpRef.current += (75 - oscAmpRef.current) * 0.15
-                const amp = oscAmpRef.current
-                hx = baseHx + (
-                  Math.sin(tSec * 1.2) * amp +
-                  Math.sin(tSec * 2.5) * amp * 0.35 +
-                  Math.sin(tSec * 0.6) * amp * 0.5
-                )
-                headY = baseHeadY
-              } else if (prevMode === 'coiling' || prevMode === 'coiled') {
-                const center = coilCenterRef.current
-                const radius = coilRadiusRef.current
-                const angSpeed = Math.min(MAX_COIL_ANG_SPD, COIL_LIN_SPEED / Math.max(10, radius))
-                coilAngleRef.current -= angSpeed
-                oscAmpRef.current *= 0.95
-
-                if (prevMode === 'coiling') {
-                  coilRadiusRef.current = Math.max(MIN_COIL_R, radius - COIL_SHRINK_RATE)
-                  if (coilRadiusRef.current <= MIN_COIL_R) {
-                    snakeModeRef.current = 'coiled'
-                  }
-                }
-
-                hx    = center.x + Math.cos(coilAngleRef.current) * coilRadiusRef.current
-                headY = center.y + Math.sin(coilAngleRef.current) * coilRadiusRef.current
-              } else {
-                // Scroll mode but idle — decaying sway amplitude
-                idleFramesRef.current++
-                oscAmpRef.current += (10 - oscAmpRef.current) * 0.04
-                const amp = oscAmpRef.current
-                hx = baseHx + (
-                  Math.sin(tSec * 1.2) * amp +
-                  Math.sin(tSec * 2.5) * amp * 0.35 +
-                  Math.sin(tSec * 0.6) * amp * 0.5
-                )
-                headY = baseHeadY
-
-                if (idleFramesRef.current > IDLE_BEFORE_COIL) {
-                  snakeModeRef.current = 'coiling'
-                  coilCenterRef.current = {
-                    x: spine[0].x - START_COIL_R,
-                    y: spine[0].y,
-                  }
-                  // Derive initial angle from actual head position — no jump
-                  const cdx = spine[0].x - coilCenterRef.current.x
-                  const cdy = spine[0].y - coilCenterRef.current.y
-                  coilAngleRef.current = Math.atan2(cdy, cdx)
-                  coilRadiusRef.current = START_COIL_R
-                  // Use coil position THIS frame (eliminates 1-frame glitch)
-                  hx    = coilCenterRef.current.x + Math.cos(coilAngleRef.current) * START_COIL_R
-                  headY = coilCenterRef.current.y + Math.sin(coilAngleRef.current) * START_COIL_R
-                }
-              }
-
-              // ── Smooth head position via lerp ──────────────────────────
-              {
-                const headLerp = 0.25
-                spine[0].x += (hx - spine[0].x) * headLerp
-                spine[0].y += (headY - spine[0].y) * headLerp
-                hx    = spine[0].x
-                headY = spine[0].y
-              }
-
-              // ── Update spine chain (follow-the-leader) ─────────────────
+              // ── Update spine chain (follow-the-leader) ──────────────
               for (let i = 1; i < spine.length; i++) {
                 const sdx = spine[i].x - spine[i - 1].x
                 const sdy = spine[i].y - spine[i - 1].y
@@ -607,24 +624,18 @@ export function IntroAnimation() {
                 }
               }
 
-              // ── Head angle from spine direction ────────────────────────
-              {
-                const adx = spine[0].x - spine[1].x
-                const ady = spine[0].y - spine[1].y
-                const alen = Math.sqrt(adx * adx + ady * ady)
-                if (alen > 0.1) {
-                  const target = Math.atan2(ady, adx)
-                  headAngleRef.current += angleDiff(target, headAngleRef.current) * 0.15
-                }
-              }
-              const headAngle = headAngleRef.current
+              // ── Clip to bezel screen bounds ─────────────────────────
+              const bRect = screenRectRef.current
+              sc.save()
+              sc.beginPath()
+              sc.rect(bRect.sl, bRect.st, bRect.sw, bRect.sh)
+              sc.clip()
 
               sc.font         = `${FONT_SIZE}px "IBM Plex Mono", monospace`
               sc.textAlign    = 'center'
               sc.textBaseline = 'middle'
 
               function bodyOp(t: number): number {
-                // Head-end capped at 0.78 so body never outshines the head itself
                 if (t <= 0.00) return 0.78
                 if (t <  0.20) return 0.78 + (t / 0.20) * (0.65 - 0.78)
                 if (t <  0.45) return 0.65 + ((t - 0.20) / 0.25) * (0.42 - 0.65)
@@ -650,19 +661,18 @@ export function IntroAnimation() {
 
               function snakeLightChance(t: number, isEye: boolean): number {
                 if (isEye)    return 0.09
-                if (t < 0.10) return 0.025   // near head — frequent glow
+                if (t < 0.10) return 0.025
                 if (t < 0.35) return 0.012
                 if (t < 0.65) return 0.005
-                return 0.001                  // tail — very sparse
+                return 0.001
               }
 
-              // ── Render body (tail first → head-end last for coil z-order) ──
+              // ── Render body (tail first → head-end last) ────────────
               for (let si = SNAKE_SAMPLES - 1; si >= 0; si--) {
                 const rawT = si / (SNAKE_SAMPLES - 1)
-                if (rawT < BODY_START_T) continue  // skip head/neck overlap zone
-                const t = (rawT - BODY_START_T) / (1 - BODY_START_T)  // remap 0→1 for visuals
+                if (rawT < BODY_START_T) continue
+                const t = (rawT - BODY_START_T) / (1 - BODY_START_T)
 
-                // Spine position uses rawT for accurate chain sampling
                 const spIdx = rawT * (spine.length - 1)
                 const i0 = Math.floor(spIdx)
                 const i1 = Math.min(spine.length - 1, i0 + 1)
@@ -670,7 +680,6 @@ export function IntroAnimation() {
                 const spX = spine[i0].x + (spine[i1].x - spine[i0].x) * frac
                 const spY = spine[i0].y + (spine[i1].y - spine[i0].y) * frac
 
-                // Tangent → normal for ribcage direction
                 const ti0 = Math.max(0, i0 - 2)
                 const ti1 = Math.min(spine.length - 1, i0 + 2)
                 const tdx = spine[ti1].x - spine[ti0].x
@@ -679,7 +688,6 @@ export function IntroAnimation() {
                 const nx = tlen > 0 ?  tdy / tlen : 1
                 const ny = tlen > 0 ? -tdx / tlen : 0
 
-                // Width uses remapped t: body tapers near head, decays toward tail
                 const halfW = SNAKE_MAX_W * Math.pow(0.988, t * SNAKE_SAMPLES) * Math.min(1, t * 10)
                 const cellR = Math.ceil(halfW)
 
@@ -691,7 +699,7 @@ export function IntroAnimation() {
                   if (px < -20 || px > vw + 20 || py < -20 || py > vh + 20) continue
                   const seed  = cellSeed(si, ci, frame)
                   const char  = charForBody(d, seed, si, ci)
-                  const alpha = snakeAlpha * bodyOp(t) * Math.pow(Math.max(0, 1 - d), 1.3)
+                  const alpha = opacity * bodyOp(t) * Math.pow(Math.max(0, 1 - d), 1.3)
                   if (alpha < 0.01) continue
                   const key = `b${si},${ci}`
                   let lit = lights.get(key) ?? 0
@@ -707,12 +715,11 @@ export function IntroAnimation() {
                 }
               }
 
-              // ── Render head — scaled pentagon (×0.35) ─────────────────
+              // ── Render head — scaled pentagon (×0.35) ───────────────
               sc.save()
               sc.translate(hx, headY)
               sc.rotate(headAngle)
 
-              // All head coords scaled ×0.35: back=-4.2, snout=4.55, rows±3.5/±4.55
               const PENTA: [number, number][] = [
                 [-4.2,-3.5],[-1.4,-4.55],[2.8,-2.1],[4.55,0],[2.8,2.1],[-1.4,4.55],[-4.2,3.5]
               ]
@@ -728,7 +735,6 @@ export function IntroAnimation() {
                 return inside
               }
 
-              // Eyes ×0.35: centers at (-0.7, ±2.1), oval axes (0.7, 0.35), void 1.5×
               function eyeZone(col: number, row: number, sign: number): 'eye' | 'void' | null {
                 const ecx = -0.7, ecy = sign * 2.1
                 if ((col-ecx)**2/(0.7**2) + (row-ecy)**2/(0.35**2) <= 1) return 'eye'
@@ -736,7 +742,7 @@ export function IntroAnimation() {
                 return null
               }
 
-              // ── Tongue flick (every 3–5s, extends over 400ms) ────────
+              // ── Tongue flick ────────────────────────────────────────
               if (!tongueFlickRef.current &&
                   now - lastFlickTimeRef.current > nextFlickIntervalRef.current) {
                 tongueFlickRef.current = true
@@ -753,7 +759,6 @@ export function IntroAnimation() {
                 }
               }
 
-              // Tongue ×0.35: snout at col≈4.55 → tongue starts at col 5 (integer grid)
               const BASE_TONGUE: [number, number, string][] = [
                 [5,-1,'-'],[6,-1,'~'],
                 [5, 1,'-'],[6, 1,'~'],
@@ -764,16 +769,15 @@ export function IntroAnimation() {
               const TONGUE: [number, number, string][] =
                 flickAmt > 0.3 ? [...BASE_TONGUE, ...FLICK_TONGUE] : BASE_TONGUE
 
-              // Neck bridge ×0.35: col -7 to -5, halfH tapers 0→3.15
               function inNeckBridge(col: number, row: number): boolean {
                 if (col < -7 || col > -5) return false
                 return Math.abs(row) <= 3.15 * ((col + 7) / 2)
               }
 
-              // ── Render tongue separately (integer coords) ──────────
+              // ── Render tongue ───────────────────────────────────────
               for (const te of TONGUE) {
                 const [tc, tr, tch] = te
-                const tongueA = snakeAlpha * (0.6 + 0.2 * Math.sin(tSec * 3 + tr)) *
+                const tongueA = opacity * (0.6 + 0.2 * Math.sin(tSec * 3 + tr)) *
                   (flickAmt > 0 ? (0.7 + flickAmt * 0.3) : 1)
                 const tk = `tg${tc},${tr}`
                 let tlit = lights.get(tk) ?? 0
@@ -786,17 +790,14 @@ export function IntroAnimation() {
                 sc.fillText(tch, tc * CELL_W, tr * CELL_H)
               }
 
-              // ── Dense head scan (0.5-cell steps for packed characters) ──
+              // ── Dense head scan (0.5-cell steps) ────────────────────
               for (let row = -5; row <= 5; row += 0.5) {
                 for (let col = -8; col <= 7; col += 0.5) {
-
-                  // ── Eye zones ──
                   const lz = eyeZone(col, row, -1)
                   const rz = eyeZone(col, row, +1)
                   if (lz === 'void' || rz === 'void') continue
 
                   if (lz === 'eye' || rz === 'eye') {
-                    // Integer key for light map (multiply by 2 to avoid float keys)
                     const ek = `ey${col*2|0},${row*2|0}`
                     let lit = lights.get(ek) ?? 0
                     if (lit > 0) { lit--; lights.set(ek, lit) }
@@ -804,13 +805,12 @@ export function IntroAnimation() {
                     const seed = cellSeed((col*2|0) + 300, (row*2|0) + 300, frame)
                     sc.shadowBlur  = 8
                     sc.shadowColor = glowColor
-                    sc.globalAlpha = snakeAlpha
+                    sc.globalAlpha = opacity
                     sc.fillStyle   = eyeColor
                     sc.fillText(['O','o','@'][Math.abs(Math.floor(seed*97))%3], col*CELL_W, row*CELL_H)
                     continue
                   }
 
-                  // ── Skull / neck bridge ──
                   if (!inPentagon(col, row) && !inNeckBridge(col, row)) continue
 
                   const distR = Math.sqrt(col**2 + row**2) / 6
@@ -818,8 +818,7 @@ export function IntroAnimation() {
                   const seed  = cellSeed((col*2|0) + 50, (row*2|0) + 50, frame)
                   const arr   = d < 0.3 ? CC : d < 0.6 ? IC : d < 0.85 ? MC : OC
                   const char  = arr[Math.abs(Math.floor(seed * 97)) % arr.length]
-                  // Head always bright — no distance falloff
-                  const alpha = snakeAlpha * 0.95
+                  const alpha = opacity * 0.95
                   if (alpha < 0.01) continue
 
                   const hk = `hd${col*2|0},${row*2|0}`
@@ -836,7 +835,8 @@ export function IntroAnimation() {
                 }
               }
 
-              sc.restore()
+              sc.restore() // head transform
+              sc.restore() // bezel clip
               sc.shadowBlur   = 0
               sc.globalAlpha  = 1
               sc.textAlign    = 'left'
@@ -853,6 +853,10 @@ export function IntroAnimation() {
     return () => {
       cancelAnimationFrame(rafRef.current)
       window.removeEventListener('resize', resize)
+      // Clean up hidden SVG
+      if (svgPathRef.current?.ownerSVGElement) {
+        document.body.removeChild(svgPathRef.current.ownerSVGElement)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
