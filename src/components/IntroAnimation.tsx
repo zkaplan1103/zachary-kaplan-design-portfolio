@@ -140,21 +140,21 @@ function angleDiff(target: number, current: number): number {
 }
 
 // ─── Snake renderer constants ─────────────────────────────────────────────────
-const SNAKE_SAMPLES    = 100          // spaced out to prevent character overlap
+const SNAKE_SAMPLES    = 100
 const SNAKE_MAX_W      = 8
-const SPINE_PTS        = 300
-const SEG_LEN          = BODY_LENGTH / (SPINE_PTS - 1)
-const BODY_START_T     = 0.12         // body rendering starts past head/neck zone
+const SPINE_PTS        = 750
+const SEG_LEN          = BODY_LENGTH / 299       // ≈1.4px — same segment length as original 300-pt chain
+const BODY_START_T     = 0.05
+const MAX_SCROLL_DISTANCE = 4000  // total wheel delta for full path traversal
 
-// COIL STATE DISABLED FOR PATH-FOLLOWER MODE
-// Re-enable if design direction changes
-// See LIVING MEMORY for coil state machine code
-// const IDLE_BEFORE_COIL = 50
-// const COIL_LIN_SPEED   = 1.2
-// const START_COIL_R     = 80
-// const MIN_COIL_R       = 42
-// const COIL_SHRINK_RATE = 0.1
-// const MAX_COIL_ANG_SPD = 0.03
+// Coil state machine — idle detection triggers coiling behavior
+const IDLE_VELOCITY_THRESHOLD = 0.0005
+const IDLE_FRAMES_BEFORE_COIL = 20
+const VELOCITY_WINDOW         = 10
+const START_COIL_R            = 80
+const MIN_COIL_R              = 42
+const COIL_SHRINK_RATE        = 0.1
+const COIL_ANG_SPEED          = 0.03
 
 // ─── SVG path-follower helpers ────────────────────────────────────────────────
 
@@ -167,14 +167,15 @@ function computePathD(): string {
   const sw = BEZEL.screen.width * vw
   const sh = BEZEL.screen.height * vh
 
+  const yPos   = 0.92             // near bottom of bezel — intro/hero boundary
   const startX = sl + sw + 20
-  const startY = st + sh * 0.82
+  const startY = st + sh * yPos
   const cp1x   = sl + sw * 0.65
-  const cp1y   = st + sh * 0.75
+  const cp1y   = st + sh * (yPos - 0.04)  // gentle curve above
   const cp2x   = sl + sw * 0.35
-  const cp2y   = st + sh * 0.89
+  const cp2y   = st + sh * (yPos + 0.03)  // gentle curve below
   const endX   = sl - 20
-  const endY   = st + sh * 0.82
+  const endY   = st + sh * yPos
 
   return `M ${startX} ${startY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${endX} ${endY}`
 }
@@ -230,6 +231,18 @@ export function IntroAnimation() {
   const svgPathRef           = useRef<SVGPathElement | null>(null)
   const svgTotalLengthRef    = useRef(0)
   const prevPathProgressRef  = useRef(0)
+  // Slither phase accumulator
+  const snakePhaseRef        = useRef(0)
+  // Coil state
+  const snakeModeRef         = useRef<'path' | 'coil'>('path')
+  const velocityHistoryRef   = useRef<number[]>([])
+  const idleFrameCountRef    = useRef(0)
+  const coilCenterRef        = useRef({ x: 0, y: 0 })
+  const coilAngleRef         = useRef(0)
+  const coilRadiusRef        = useRef(START_COIL_R)
+  // Scroll-driven progress (wheel events, not page scroll)
+  const scrollAccumRef       = useRef(0)
+  const snakeGoneRef         = useRef(false)
   // Tongue flick state
   const tongueFlickRef       = useRef(false)
   const flickStartRef        = useRef(0)
@@ -332,6 +345,9 @@ export function IntroAnimation() {
         svgPathRef.current.setAttribute('d', computePathD())
         svgTotalLengthRef.current = svgPathRef.current.getTotalLength()
         snakeSpineRef.current.length = 0  // reset spine for new path
+        snakeModeRef.current = 'path'
+        idleFrameCountRef.current = 0
+        velocityHistoryRef.current.length = 0
         const parentSvg = svgPathRef.current.ownerSVGElement
         if (parentSvg) {
           parentSvg.setAttribute('width', String(window.innerWidth))
@@ -554,40 +570,84 @@ export function IntroAnimation() {
         sc.clearRect(0, 0, vw, vh)
 
         if (phase === 'screensaver') {
-          const sectionEl = canvasRef.current?.parentElement
-          const svgPath   = svgPathRef.current
-          const pathLen   = svgTotalLengthRef.current
+          const svgPath = svgPathRef.current
+          const pathLen = svgTotalLengthRef.current
 
-          if (sectionEl && svgPath && pathLen > 0) {
-            const introBottom = sectionEl.getBoundingClientRect().bottom
-            const viewportH   = window.innerHeight
-            const triggerStart = viewportH * 0.9
-            const triggerEnd   = viewportH * 0.1
-
-            const rawProgress  = (introBottom - triggerStart) / (triggerEnd - triggerStart)
+          if (svgPath && pathLen > 0 && !snakeGoneRef.current) {
+            const bRect        = screenRectRef.current
+            const rawProgress  = scrollAccumRef.current / MAX_SCROLL_DISTANCE
             const pathProgress = Math.max(0, Math.min(1, rawProgress))
             const opacity      = snakeVisibility(pathProgress)
 
-            // Reset spine when snake is fully hidden
+            // Reset spine + coil when snake is fully hidden
             if (opacity <= 0.01) {
               if (snakeSpineRef.current.length > 0) snakeSpineRef.current.length = 0
+              snakeModeRef.current = 'path'
+              idleFrameCountRef.current = 0
+              velocityHistoryRef.current.length = 0
+              // Snake has fully traversed — mark as permanently gone
+              if (pathProgress > 0.95) snakeGoneRef.current = true
             } else {
               // ── Head position from SVG path ──────────────────────────
               const dist   = pathProgress * pathLen
               const headPt = svgPath.getPointAtLength(dist)
-              const hx     = headPt.x
-              const headY  = headPt.y
 
-              // ── Head angle from path tangent + scroll direction ──────
+              // ── Path tangent + scroll direction ──────────────────────
               const p1 = svgPath.getPointAtLength(Math.max(0, dist - 2))
               const p2 = svgPath.getPointAtLength(Math.min(pathLen, dist + 2))
               const tangentAngle = Math.atan2(p2.y - p1.y, p2.x - p1.x)
-              const scrollDir = pathProgress >= prevPathProgressRef.current ? 1 : -1
+              const prevProgress = prevPathProgressRef.current
+              const pathDelta    = Math.abs(pathProgress - prevProgress)
+              const scrollDir    = pathProgress >= prevProgress ? 1 : -1
               prevPathProgressRef.current = pathProgress
-              // When scrolling forward (right→left), tangent points left — correct.
-              // When scrolling backward, flip 180° so head faces direction of travel.
-              const targetAngle = scrollDir > 0 ? tangentAngle : tangentAngle + Math.PI
-              headAngleRef.current += angleDiff(targetAngle, headAngleRef.current) * 0.2
+
+              // ── Slither: phase advance from path travel distance ─────
+              snakePhaseRef.current += pathDelta * pathLen * 0.04
+              const slitherPhase = snakePhaseRef.current
+              const tgLen = Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2)
+              const perpX = tgLen > 0 ? -(p2.y - p1.y) / tgLen : 0
+              const perpY = tgLen > 0 ?  (p2.x - p1.x) / tgLen : 1
+              const slitherAmp = 35
+              let hx    = headPt.x + perpX * Math.sin(slitherPhase) * slitherAmp
+              let headY = headPt.y + perpY * Math.sin(slitherPhase) * slitherAmp
+
+              // ── Idle detection + coil state machine ─────────────────
+              const velHistory = velocityHistoryRef.current
+              velHistory.push(pathDelta)
+              if (velHistory.length > VELOCITY_WINDOW) velHistory.shift()
+              const avgVel = velHistory.reduce((a, b) => a + b, 0) / velHistory.length
+
+              if (snakeModeRef.current === 'path') {
+                if (avgVel < IDLE_VELOCITY_THRESHOLD && opacity > 0.5) {
+                  idleFrameCountRef.current++
+                  if (idleFrameCountRef.current >= IDLE_FRAMES_BEFORE_COIL) {
+                    snakeModeRef.current = 'coil'
+                    coilCenterRef.current = { x: hx, y: headY }
+                    coilAngleRef.current = headAngleRef.current
+                    coilRadiusRef.current = START_COIL_R
+                  }
+                } else {
+                  idleFrameCountRef.current = 0
+                }
+              } else {
+                if (avgVel > 0.001) {
+                  snakeModeRef.current = 'path'
+                  idleFrameCountRef.current = 0
+                }
+              }
+
+              // ── Final head position (path mode vs coil mode) ────────
+              if (snakeModeRef.current === 'coil') {
+                coilAngleRef.current += COIL_ANG_SPEED
+                coilRadiusRef.current = Math.max(MIN_COIL_R, coilRadiusRef.current - COIL_SHRINK_RATE)
+                hx    = coilCenterRef.current.x + Math.cos(coilAngleRef.current) * coilRadiusRef.current
+                headY = coilCenterRef.current.y + Math.sin(coilAngleRef.current) * coilRadiusRef.current
+                const coilTarget = coilAngleRef.current + Math.PI / 2
+                headAngleRef.current += angleDiff(coilTarget, headAngleRef.current) * 0.2
+              } else {
+                const targetAngle = scrollDir > 0 ? tangentAngle : tangentAngle + Math.PI
+                headAngleRef.current += angleDiff(targetAngle, headAngleRef.current) * 0.2
+              }
               const headAngle = headAngleRef.current
 
               // ── Colors / timing ─────────────────────────────────────
@@ -608,7 +668,7 @@ export function IntroAnimation() {
                 }
               }
 
-              // Set head to path position (path is already smooth — no lerp needed)
+              // Set head to current position
               spine[0].x = hx
               spine[0].y = headY
 
@@ -625,7 +685,6 @@ export function IntroAnimation() {
               }
 
               // ── Clip to bezel screen bounds ─────────────────────────
-              const bRect = screenRectRef.current
               sc.save()
               sc.beginPath()
               sc.rect(bRect.sl, bRect.st, bRect.sw, bRect.sh)

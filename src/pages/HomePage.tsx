@@ -1,9 +1,9 @@
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { IntroAnimation } from '@/components/IntroAnimation'
 import CRTPowerOn from '@/components/CRTPowerOn'
-import { HeroSection } from '@/components/sections/HeroSection'
+// import { HeroSection } from '@/components/sections/HeroSection'
 // import { WorkSection } from '@/components/sections/WorkSection'
-import { AboutSection } from '@/components/sections/AboutSection'
+// import { AboutSection } from '@/components/sections/AboutSection'
 // import { SkillsSection } from '@/components/sections/SkillsSection'
 // import { ContactSection } from '@/components/sections/ContactSection'
 import { useUIStore } from '@/store/uiStore'
@@ -20,11 +20,14 @@ export function HomePage() {
       <PageWrapper>
         {!introComplete && <IntroAnimation />}
         {introComplete && <CRTPowerOn />}
-        <HeroSection />
-        <AboutSection />
-        {/* <WorkSection />
-        <SkillsSection />
-        <ContactSection /> */}
+        {/* All sections commented out for Phase B snake testing */}
+        {/* <HeroSection /> */}
+        {/* <AboutSection /> */}
+        {/* <WorkSection /> */}
+        {/* <SkillsSection /> */}
+        {/* <ContactSection /> */}
+        {/* Scroll spacer — provides scroll distance for snake path traversal */}
+        {!introComplete && <div style={{ height: '300vh' }} />}
       </PageWrapper>
     </>
   )
