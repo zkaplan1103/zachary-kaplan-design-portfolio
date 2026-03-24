@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+// import { createPortal } from 'react-dom' // SNAKE SYSTEM — COMMENTED OUT
 import { motion } from 'framer-motion'
 import { useUIStore } from '@/store/uiStore'
 import { BEZEL } from '@/config/bezel'
-import { CELL_W, CELL_H, BODY_LENGTH, cellSeed } from '@/components/swarm/dragonEngine'
+// import { CELL_W, CELL_H, BODY_LENGTH, cellSeed } from '@/components/swarm/dragonEngine' // SNAKE SYSTEM — COMMENTED OUT
 
 // ─── Programmatic grid generation (smooth diagonals via interpolation) ───────
 
@@ -131,23 +131,28 @@ const WARP_RADIUS   = 55
 const WARP_STRENGTH = 50
 const WARP_SPRING   = 0.15
 
-// ─── Angle utilities ─────────────────────────────────────────────────────────
+/* SNAKE SYSTEM — angleDiff utility (used only by snake head angle logic)
 function angleDiff(target: number, current: number): number {
   let d = target - current
   while (d > Math.PI) d -= Math.PI * 2
   while (d < -Math.PI) d += Math.PI * 2
   return d
 }
+*/
 
-// ─── Snake renderer constants ─────────────────────────────────────────────────
+// ═══════════════════════════════════════
+// SNAKE SYSTEM — COMMENTED OUT
+// Preserved for future use
+// See LIVING MEMORY for full architecture
+// ═══════════════════════════════════════
+/*
 const SNAKE_SAMPLES    = 100
 const SNAKE_MAX_W      = 8
 const SPINE_PTS        = 750
-const SEG_LEN          = BODY_LENGTH / 299       // ≈1.4px — same segment length as original 300-pt chain
+const SEG_LEN          = BODY_LENGTH / 299
 const BODY_START_T     = 0.05
-const MAX_SCROLL_DISTANCE = 4000  // total wheel delta for full path traversal
+const MAX_SCROLL_DISTANCE = 4000
 
-// Coil state machine — idle detection triggers coiling behavior
 const IDLE_VELOCITY_THRESHOLD = 0.0005
 const IDLE_FRAMES_BEFORE_COIL = 20
 const VELOCITY_WINDOW         = 10
@@ -156,9 +161,6 @@ const MIN_COIL_R              = 42
 const COIL_SHRINK_RATE        = 0.1
 const COIL_ANG_SPEED          = 0.03
 
-// ─── SVG path-follower helpers ────────────────────────────────────────────────
-
-/** Build SVG cubic bezier d-string from BEZEL config × viewport size. */
 function computePathD(): string {
   const vw = window.innerWidth / 100
   const vh = window.innerHeight / 100
@@ -166,27 +168,25 @@ function computePathD(): string {
   const st = BEZEL.screen.top * vh
   const sw = BEZEL.screen.width * vw
   const sh = BEZEL.screen.height * vh
-
-  const yPos   = 0.92             // near bottom of bezel — intro/hero boundary
+  const yPos   = 0.92
   const startX = sl + sw + 20
   const startY = st + sh * yPos
   const cp1x   = sl + sw * 0.65
-  const cp1y   = st + sh * (yPos - 0.04)  // gentle curve above
+  const cp1y   = st + sh * (yPos - 0.04)
   const cp2x   = sl + sw * 0.35
-  const cp2y   = st + sh * (yPos + 0.03)  // gentle curve below
+  const cp2y   = st + sh * (yPos + 0.03)
   const endX   = sl - 20
   const endY   = st + sh * yPos
-
   return `M ${startX} ${startY} C ${cp1x} ${cp1y} ${cp2x} ${cp2y} ${endX} ${endY}`
 }
 
-/** Visibility envelope: fade in 0→0.05, full 0.05→0.95, fade out 0.95→1. */
 function snakeVisibility(progress: number): number {
   if (progress <= 0 || progress >= 1) return 0
   if (progress < 0.05) return progress / 0.05
   if (progress > 0.95) return (1 - progress) / 0.05
   return 1
 }
+*/
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -212,7 +212,7 @@ export function IntroAnimation() {
   const theme            = useUIStore((s) => s.theme)
 
   const canvasRef      = useRef<HTMLCanvasElement>(null)
-  const swarmCanvasRef = useRef<HTMLCanvasElement>(null)
+  // const swarmCanvasRef = useRef<HTMLCanvasElement>(null) // SNAKE SYSTEM
   const particlesRef   = useRef<Particle[]>([])
   const phaseRef       = useRef<Phase>('screensaver')
   const mouseRef       = useRef({ x: -9999, y: -9999 })
@@ -222,32 +222,28 @@ export function IntroAnimation() {
   const screenRectRef  = useRef<ScreenRect>(computeScreenRect())
   const [screenDims, setScreenDims] = useState<ScreenRect>(() => computeScreenRect())
 
-  // Snake trail chain + renderer state
+  /* SNAKE SYSTEM — COMMENTED OUT
   const snakeSpineRef        = useRef<{x: number; y: number}[]>([])
-  const headAngleRef         = useRef(Math.PI)    // facing left (path goes right→left)
+  const headAngleRef         = useRef(Math.PI)
   const lightMapRef          = useRef(new Map<string, number>())
   const frameCountRef        = useRef(0)
-  // SVG path-follower refs
   const svgPathRef           = useRef<SVGPathElement | null>(null)
   const svgTotalLengthRef    = useRef(0)
   const prevPathProgressRef  = useRef(0)
-  // Slither phase accumulator
   const snakePhaseRef        = useRef(0)
-  // Coil state
   const snakeModeRef         = useRef<'path' | 'coil'>('path')
   const velocityHistoryRef   = useRef<number[]>([])
   const idleFrameCountRef    = useRef(0)
   const coilCenterRef        = useRef({ x: 0, y: 0 })
   const coilAngleRef         = useRef(0)
   const coilRadiusRef        = useRef(START_COIL_R)
-  // Scroll-driven progress (wheel events, not page scroll)
   const scrollAccumRef       = useRef(0)
   const snakeGoneRef         = useRef(false)
-  // Tongue flick state
   const tongueFlickRef       = useRef(false)
   const flickStartRef        = useRef(0)
   const lastFlickTimeRef     = useRef(0)
   const nextFlickIntervalRef = useRef(3000 + Math.random() * 2000)
+  */
 
   // Screensaver bounce
   const bouncePosRef = useRef({ x: 0, y: 0 })
@@ -269,6 +265,24 @@ export function IntroAnimation() {
   const [introExiting, setIntroExiting] = useState(false)
 
   useEffect(() => { themeRef.current = theme }, [theme])
+
+  // ── Scroll lock — prevent any scrolling during intro ──────────────────────
+  useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    // Block wheel + touch scroll events entirely
+    const prevent = (e: Event) => e.preventDefault()
+    window.addEventListener('wheel', prevent, { passive: false })
+    window.addEventListener('touchmove', prevent, { passive: false })
+    return () => {
+      html.style.overflow = ''
+      body.style.overflow = ''
+      window.removeEventListener('wheel', prevent)
+      window.removeEventListener('touchmove', prevent)
+    }
+  }, [])
 
   // ── Particle init ──────────────────────────────────────────────────────────
 
@@ -331,20 +345,22 @@ export function IntroAnimation() {
       canvas.width  = Math.round(rect.sw)
       canvas.height = Math.round(rect.sh)
 
+      /* SNAKE SYSTEM — COMMENTED OUT
       if (swarmCanvasRef.current) {
         swarmCanvasRef.current.width  = window.innerWidth
         swarmCanvasRef.current.height = window.innerHeight
       }
+      */
 
       if (phaseRef.current === 'screensaver') {
         bouncePosRef.current = { x: rect.sw / 2, y: rect.sh / 2 }
       }
 
-      // Update SVG path on resize (viewport-relative coords change)
+      /* SNAKE SYSTEM — COMMENTED OUT
       if (svgPathRef.current) {
         svgPathRef.current.setAttribute('d', computePathD())
         svgTotalLengthRef.current = svgPathRef.current.getTotalLength()
-        snakeSpineRef.current.length = 0  // reset spine for new path
+        snakeSpineRef.current.length = 0
         snakeModeRef.current = 'path'
         idleFrameCountRef.current = 0
         velocityHistoryRef.current.length = 0
@@ -354,6 +370,7 @@ export function IntroAnimation() {
           parentSvg.setAttribute('height', String(window.innerHeight))
         }
       }
+      */
     }
 
     resize()
@@ -361,7 +378,7 @@ export function IntroAnimation() {
     initParticles(canvas.width, canvas.height)
     phaseRef.current = 'screensaver'
 
-    // ── Create hidden SVG for path-follower math ──────────────────────────
+    /* SNAKE SYSTEM — COMMENTED OUT
     const svgNS = 'http://www.w3.org/2000/svg'
     const svg = document.createElementNS(svgNS, 'svg')
     svg.setAttribute('width', String(window.innerWidth))
@@ -377,6 +394,7 @@ export function IntroAnimation() {
     document.body.appendChild(svg)
     svgPathRef.current = pathEl
     svgTotalLengthRef.current = pathEl.getTotalLength()
+    */
 
     const ctx = canvas.getContext('2d')!
     ctx.imageSmoothingEnabled = false
@@ -562,7 +580,7 @@ export function IntroAnimation() {
       ctx.textAlign    = 'left'
       ctx.textBaseline = 'alphabetic'
 
-      // ── Portal canvas: SVG path-follower snake ─────────────────────────────
+      /* SNAKE SYSTEM — COMMENTED OUT (portal canvas snake rendering)
       const sc = swarmCanvasRef.current?.getContext('2d')
       if (sc && swarmCanvasRef.current) {
         const vw = swarmCanvasRef.current.width
@@ -904,6 +922,7 @@ export function IntroAnimation() {
           }
         }
       }
+      SNAKE SYSTEM — END COMMENTED OUT */
 
       rafRef.current = requestAnimationFrame(loop)
     }
@@ -912,10 +931,11 @@ export function IntroAnimation() {
     return () => {
       cancelAnimationFrame(rafRef.current)
       window.removeEventListener('resize', resize)
-      // Clean up hidden SVG
+      /* SNAKE SYSTEM — COMMENTED OUT
       if (svgPathRef.current?.ownerSVGElement) {
         document.body.removeChild(svgPathRef.current.ownerSVGElement)
       }
+      */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -995,6 +1015,7 @@ export function IntroAnimation() {
 
   return (
     <>
+      {/* SNAKE SYSTEM — COMMENTED OUT (portal canvas)
       {createPortal(
         <canvas
           ref={swarmCanvasRef}
@@ -1003,6 +1024,7 @@ export function IntroAnimation() {
         />,
         document.body
       )}
+      */}
 
       <motion.section
         className={`relative overflow-hidden select-none ${bgClass}`}

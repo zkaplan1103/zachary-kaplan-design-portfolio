@@ -1,3 +1,8 @@
+/* ═══════════════════════════════════════
+   SNAKE/SWARM SYSTEM — COMMENTED OUT
+   Preserved for future use
+   ═══════════════════════════════════════
+
 import { useEffect, useRef } from 'react'
 import {
   initParticlesZK,
@@ -64,4 +69,10 @@ export function SwarmCanvas() {
       }}
     />
   )
+}
+*/
+
+// Placeholder export so imports don't break during western town build
+export function SwarmCanvas() {
+  return null
 }
