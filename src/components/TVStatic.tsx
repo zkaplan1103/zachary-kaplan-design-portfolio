@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { BEZEL } from '@/config/bezel'
 
 interface TVStaticProps {
   onComplete: () => void
@@ -11,10 +12,29 @@ const FADE_DURATION = 300
 const FPS = 30
 const FRAME_MS = 1000 / FPS
 
+function getBezelRect() {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
+  return {
+    sl: (BEZEL.screen.left / 100) * vw,
+    st: (BEZEL.screen.top / 100) * vh,
+    sw: (BEZEL.screen.width / 100) * vw,
+    sh: (BEZEL.screen.height / 100) * vh,
+  }
+}
+
 export function TVStatic({ onComplete }: TVStaticProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [phase, setPhase] = useState<'static' | 'flash' | 'fade' | 'done'>('static')
   const [fadeOpacity, setFadeOpacity] = useState(1)
+  const [bezel, setBezel] = useState(getBezelRect)
+
+  // Resize handler
+  useEffect(() => {
+    function onResize() { setBezel(getBezelRect()) }
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   // Phase 1: Chunky static at ~30fps
   useEffect(() => {
@@ -27,8 +47,9 @@ export function TVStatic({ onComplete }: TVStaticProps) {
 
     function resize() {
       if (!canvas) return
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
+      const b = getBezelRect()
+      canvas.width = Math.round(b.sw)
+      canvas.height = Math.round(b.sh)
     }
     resize()
     window.addEventListener('resize', resize)
@@ -49,9 +70,15 @@ export function TVStatic({ onComplete }: TVStaticProps) {
       const cols = Math.ceil(w / BLOCK_SIZE)
       const rows = Math.ceil(h / BLOCK_SIZE)
 
+      // CRT-style static: weighted grey distribution
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
-          const v = Math.floor(Math.random() * 256)
+          const roll = Math.random()
+          const v = roll < 0.10 ? 0       // 10% black
+                  : roll < 0.25 ? 51      // 15% dark grey
+                  : roll < 0.45 ? 102     // 20% mid grey
+                  : roll < 0.70 ? 170     // 25% light grey
+                  : 255                    // 30% white
           ctx.fillStyle = `rgb(${v},${v},${v})`
           ctx.fillRect(c * BLOCK_SIZE, r * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE)
         }
@@ -77,6 +104,7 @@ export function TVStatic({ onComplete }: TVStaticProps) {
   }, [phase])
 
   // Phase 3: Fade out
+  const onCompleteStable = useCallback(onComplete, [onComplete])
   useEffect(() => {
     if (phase !== 'fade') return
     const start = performance.now()
@@ -90,12 +118,12 @@ export function TVStatic({ onComplete }: TVStaticProps) {
         raf = requestAnimationFrame(tick)
       } else {
         setPhase('done')
-        onComplete()
+        onCompleteStable()
       }
     }
     raf = requestAnimationFrame(tick)
     return () => cancelAnimationFrame(raf)
-  }, [phase, onComplete])
+  }, [phase, onCompleteStable])
 
   if (phase === 'done') return null
 
@@ -103,23 +131,23 @@ export function TVStatic({ onComplete }: TVStaticProps) {
     <div
       style={{
         position: 'fixed',
-        inset: 0,
+        left: bezel.sl,
+        top: bezel.st,
+        width: bezel.sw,
+        height: bezel.sh,
         zIndex: 1000,
         opacity: phase === 'fade' ? fadeOpacity : 1,
         pointerEvents: 'all',
+        overflow: 'hidden',
+        backgroundColor: '#000000',
       }}
     >
       {phase === 'flash' ? (
         <div style={{ width: '100%', height: '100%', backgroundColor: '#ffffff' }} />
-      ) : phase === 'static' ? (
-        <canvas
-          ref={canvasRef}
-          style={{ width: '100%', height: '100%', display: 'block' }}
-        />
       ) : (
         <canvas
           ref={canvasRef}
-          style={{ width: '100%', height: '100%', display: 'block' }}
+          style={{ width: '100%', height: '100%', display: 'block', opacity: 0.92 }}
         />
       )}
     </div>

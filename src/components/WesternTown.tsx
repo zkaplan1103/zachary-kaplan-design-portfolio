@@ -12,14 +12,14 @@ const DAY = {
   text: '#1a1207',
   textShadow: 'rgba(0,0,0,0.25)',
   panelBorder: 'rgba(26,18,7,0.3)',
-  overlay: 'rgba(242,201,76,0.08)',
   toggleBg: '#1a1207',
   toggleText: '#F2C94C',
   tumbleweed: '#8B6914',
   subtitle: 'rgba(26,18,7,0.6)',
   enterBg: '#1a1207',
   enterText: '#F2C94C',
-  enterHoverBg: '#2d1f0e',
+  building: '#8B7332',
+  footerText: 'rgba(26,18,7,0.45)',
 }
 
 const NIGHT = {
@@ -30,14 +30,14 @@ const NIGHT = {
   text: '#f0efe9',
   textShadow: 'rgba(0,0,0,0.6)',
   panelBorder: 'rgba(240,239,233,0.15)',
-  overlay: 'rgba(10,14,26,0.3)',
   toggleBg: '#f0efe9',
   toggleText: '#0a0e1a',
   tumbleweed: '#5a4a2a',
   subtitle: 'rgba(240,239,233,0.5)',
   enterBg: '#f0efe9',
   enterText: '#0a0e1a',
-  enterHoverBg: '#d4d3cd',
+  building: '#0d0b08',
+  footerText: 'rgba(240,239,233,0.35)',
 }
 
 // ─── Panel data ─────────────────────────────────────────────────────────────
@@ -53,18 +53,37 @@ const PANELS = [
 
 const STARS = Array.from({ length: 60 }, () => ({
   x: Math.random() * 100,
-  y: Math.random() * 40,
+  y: Math.random() * 45,
   size: 1 + Math.random() * 2,
   delay: Math.random() * 3,
   duration: 2 + Math.random() * 2,
 }))
 
-// ─── Screen dimensions helper ───────────────────────────────────────────────
+// ─── Buildings data ─────────────────────────────────────────────────────────
 
-function getScreenDims() {
+const BUILDINGS = [
+  { w: 7, h: 50, hasSign: false },
+  { w: 10, h: 70, hasSign: true },
+  { w: 8, h: 55, hasSign: false },
+  { w: 12, h: 80, hasSign: true },
+  { w: 6, h: 40, hasSign: false },
+  { w: 9, h: 65, hasSign: false },
+  { w: 14, h: 85, hasSign: true },
+  { w: 7, h: 48, hasSign: false },
+  { w: 11, h: 72, hasSign: true },
+  { w: 8, h: 58, hasSign: false },
+]
+
+// ─── Bezel rect helper ──────────────────────────────────────────────────────
+
+function getBezelRect() {
+  const vw = window.innerWidth
+  const vh = window.innerHeight
   return {
-    sw: (BEZEL.screen.width / 100) * window.innerWidth,
-    sh: (BEZEL.screen.height / 100) * window.innerHeight,
+    sl: (BEZEL.screen.left / 100) * vw,
+    st: (BEZEL.screen.top / 100) * vh,
+    sw: (BEZEL.screen.width / 100) * vw,
+    sh: (BEZEL.screen.height / 100) * vh,
   }
 }
 
@@ -72,8 +91,7 @@ function getScreenDims() {
 
 export function WesternTown() {
   const [isNight, setIsNight] = useState(false)
-  const [screenDims, setScreenDims] = useState(getScreenDims)
-  const mouseRef = useRef({ x: 0, y: 0 })
+  const [bezel, setBezel] = useState(getBezelRect)
   const [parallaxX, setParallaxX] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -81,7 +99,7 @@ export function WesternTown() {
 
   // Resize handler
   useEffect(() => {
-    function onResize() { setScreenDims(getScreenDims()) }
+    function onResize() { setBezel(getBezelRect()) }
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -91,26 +109,27 @@ export function WesternTown() {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
     const centerX = rect.left + rect.width / 2
-    const normalizedX = (e.clientX - centerX) / (rect.width / 2) // -1 to 1
-    mouseRef.current.x = normalizedX
-    setParallaxX(normalizedX * -20) // 20px max shift
+    const normalizedX = (e.clientX - centerX) / (rect.width / 2)
+    setParallaxX(normalizedX * -15)
   }, [])
 
-  const { sw, sh } = screenDims
+  const { sl, st, sw, sh } = bezel
 
   return (
     <div
       ref={containerRef}
       onMouseMove={onMouseMove}
       style={{
-        width: sw > 0 ? `${Math.round(sw)}px` : '100%',
-        height: sh > 0 ? `${Math.round(sh)}px` : '100vh',
-        position: 'relative',
+        position: 'fixed',
+        left: sl,
+        top: st,
+        width: sw,
+        height: sh,
         overflow: 'hidden',
         cursor: 'default',
       }}
     >
-      {/* ── Sky gradient ───────────────────────────────────────────── */}
+      {/* ── Sky gradient (full background) ─────────────────────────── */}
       <motion.div
         animate={{ background: `linear-gradient(to bottom, ${palette.skyTop}, ${palette.skyBot})` }}
         transition={{ duration: 0.8 }}
@@ -147,71 +166,193 @@ export function WesternTown() {
         )}
       </AnimatePresence>
 
-      {/* ── Town background (parallax) ─────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════
+          TOP THIRD — SKY / TITLE CARD
+          ════════════════════════════════════════════════════════════════ */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '38%',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          zIndex: 10,
+          paddingTop: '3%',
+        }}
+      >
+        {/* 2x2 Panel Grid — small title card in the sky */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.6, delay: 0.3 }}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: Math.max(3, sh * 0.008),
+            width: sw * 0.32,
+            maxWidth: 280,
+            position: 'relative',
+          }}
+        >
+          {PANELS.map((panel) => (
+            <motion.div
+              key={panel.label}
+              whileHover={{ scale: 1.06, y: -2 }}
+              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+              style={{
+                aspectRatio: '1',
+                backgroundColor: panel.color,
+                borderRadius: 4,
+                border: `1px solid ${palette.panelBorder}`,
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+                padding: '6%',
+                cursor: 'pointer',
+                position: 'relative',
+                overflow: 'hidden',
+              }}
+            >
+              <span
+                style={{
+                  fontFamily: '"Bebas Neue", sans-serif',
+                  fontSize: `clamp(9px, ${sw * 0.012}px, 16px)`,
+                  color: '#000000',
+                  opacity: 0.7,
+                  letterSpacing: '0.08em',
+                }}
+              >
+                {panel.label}
+              </span>
+            </motion.div>
+          ))}
+
+          {/* ZK DESIGNS overlay on top of grid */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.5, delay: 0.6 }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+            }}
+          >
+            <h1
+              style={{
+                fontFamily: '"Bebas Neue", sans-serif',
+                fontSize: `clamp(28px, ${sw * 0.04}px, 52px)`,
+                color: palette.text,
+                textShadow: `1px 1px 6px ${palette.textShadow}`,
+                letterSpacing: '0.1em',
+                lineHeight: 1,
+                margin: 0,
+              }}
+            >
+              ZK DESIGNS
+            </h1>
+          </motion.div>
+        </motion.div>
+
+        {/* Subtitle below grid */}
+        <motion.p
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.5, delay: 0.8 }}
+          style={{
+            fontFamily: '"IBM Plex Mono", monospace',
+            fontSize: `clamp(7px, ${sw * 0.009}px, 11px)`,
+            color: palette.subtitle,
+            letterSpacing: '0.2em',
+            textTransform: 'uppercase',
+            marginTop: sh * 0.012,
+          }}
+        >
+          frontend designer / developer
+        </motion.p>
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════
+          MIDDLE THIRD — TOWN BUILDINGS (parallax)
+          ════════════════════════════════════════════════════════════════ */}
       <motion.div
         animate={{ x: parallaxX }}
         transition={{ type: 'spring', stiffness: 120, damping: 25 }}
         style={{
           position: 'absolute',
-          bottom: '18%',
-          left: '-5%',
-          right: '-5%',
-          height: '45%',
+          bottom: '22%',
+          left: '-3%',
+          right: '-3%',
+          height: '35%',
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'center',
-          gap: '2%',
+          gap: sw * 0.005,
           pointerEvents: 'none',
         }}
       >
-        {/* Placeholder town buildings — CSS silhouettes */}
-        {[
-          { w: '8%', h: '55%' },
-          { w: '12%', h: '75%' },
-          { w: '10%', h: '65%' },
-          { w: '6%', h: '45%' },
-          { w: '14%', h: '80%' },
-          { w: '9%', h: '60%' },
-          { w: '11%', h: '70%' },
-          { w: '7%', h: '50%' },
-        ].map((b, i) => (
+        {BUILDINGS.map((b, i) => (
           <motion.div
             key={i}
-            animate={{
-              backgroundColor: isNight ? '#0d0b08' : '#8B7332',
-            }}
+            animate={{ backgroundColor: palette.building }}
             transition={{ duration: 0.8 }}
             style={{
-              width: b.w,
-              height: b.h,
+              width: `${b.w}%`,
+              height: `${b.h}%`,
               borderRadius: '2px 2px 0 0',
               position: 'relative',
+              flexShrink: 0,
             }}
           >
-            {/* Window lights (night only) */}
-            {isNight && (
-              <>
-                <div style={{
-                  position: 'absolute', top: '15%', left: '20%', width: '25%', height: '12%',
-                  backgroundColor: 'rgba(255,180,60,0.7)', borderRadius: 1,
-                }} />
-                <div style={{
-                  position: 'absolute', top: '15%', right: '20%', width: '25%', height: '12%',
-                  backgroundColor: Math.random() > 0.3 ? 'rgba(255,180,60,0.5)' : 'transparent',
+            {/* Window grid */}
+            {Array.from({ length: Math.floor(b.h / 20) }).map((_, row) => (
+              <div key={row} style={{ display: 'flex', justifyContent: 'space-evenly', paddingTop: '15%' }}>
+                {[0, 1].map((col) => (
+                  <div
+                    key={col}
+                    style={{
+                      width: '28%',
+                      aspectRatio: '1 / 1.2',
+                      backgroundColor: isNight
+                        ? ((i + row + col) % 3 !== 0 ? 'rgba(255,180,60,0.6)' : 'rgba(255,180,60,0.15)')
+                        : 'rgba(0,0,0,0.12)',
+                      borderRadius: 1,
+                    }}
+                  />
+                ))}
+              </div>
+            ))}
+
+            {/* Saloon/shop sign */}
+            {b.hasSign && (
+              <div
+                style={{
+                  position: 'absolute',
+                  top: -4,
+                  left: '10%',
+                  right: '10%',
+                  height: 6,
+                  backgroundColor: isNight ? '#2a1a0a' : '#5a4020',
                   borderRadius: 1,
-                }} />
-                <div style={{
-                  position: 'absolute', top: '40%', left: '20%', width: '25%', height: '12%',
-                  backgroundColor: Math.random() > 0.5 ? 'rgba(255,180,60,0.4)' : 'transparent',
-                  borderRadius: 1,
-                }} />
-              </>
+                }}
+              />
             )}
           </motion.div>
         ))}
       </motion.div>
 
-      {/* ── Ground ─────────────────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════
+          BOTTOM THIRD — GROUND + FOREGROUND CTA
+          ════════════════════════════════════════════════════════════════ */}
+
+      {/* Ground */}
       <motion.div
         animate={{
           background: `linear-gradient(to bottom, ${palette.ground}, ${palette.groundEdge})`,
@@ -222,173 +363,85 @@ export function WesternTown() {
           bottom: 0,
           left: 0,
           right: 0,
-          height: '18%',
+          height: '22%',
         }}
       />
 
-      {/* ── Tumbleweed ─────────────────────────────────────────────── */}
+      {/* Tumbleweed */}
       <motion.div
         animate={{
           x: [sw * -0.1, sw * 1.1],
           rotate: [0, 720],
         }}
         transition={{
-          duration: 12,
+          duration: 14,
           repeat: Infinity,
-          ease: 'linear',
-          repeatDelay: 4,
+          ease: 'linear' as const,
+          repeatDelay: 5,
         }}
         style={{
           position: 'absolute',
-          bottom: '17%',
-          width: 24,
-          height: 24,
+          bottom: '21%',
+          width: 18,
+          height: 18,
           borderRadius: '50%',
           border: `2px solid ${palette.tumbleweed}`,
-          opacity: 0.5,
+          opacity: 0.45,
           pointerEvents: 'none',
         }}
       />
 
-      {/* ── Content overlay ────────────────────────────────────────── */}
+      {/* Ground content: tagline + enter button */}
       <div
         style={{
           position: 'absolute',
-          inset: 0,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: '22%',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           zIndex: 10,
-          padding: '5%',
+          gap: sh * 0.015,
         }}
       >
-        {/* Title */}
-        <motion.h1
-          initial={{ opacity: 0, y: -30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          style={{
-            fontFamily: '"Bebas Neue", sans-serif',
-            fontSize: 'clamp(48px, 8vw, 120px)',
-            color: palette.text,
-            textShadow: `2px 2px 8px ${palette.textShadow}`,
-            letterSpacing: '0.08em',
-            lineHeight: 1,
-            marginBottom: '0.15em',
-            textAlign: 'center',
-          }}
-        >
-          ZK DESIGNS
-        </motion.h1>
-
-        {/* Subtitle */}
         <motion.p
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
+          transition={{ delay: 1.0 }}
           style={{
             fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: 'clamp(10px, 1.4vw, 16px)',
-            color: palette.subtitle,
-            letterSpacing: '0.2em',
+            fontSize: `clamp(7px, ${sw * 0.008}px, 10px)`,
+            color: palette.footerText,
+            letterSpacing: '0.25em',
             textTransform: 'uppercase',
-            marginBottom: '2em',
           }}
         >
-          designer / developer
+          est. 2024 &#10022; population: 1
         </motion.p>
 
-        {/* 2×2 Panel Grid */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.9 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.6, delay: 0.8 }}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: 'clamp(8px, 1.5vw, 16px)',
-            width: 'clamp(200px, 45vw, 480px)',
-            marginBottom: '2em',
-          }}
-        >
-          {PANELS.map((panel) => (
-            <motion.div
-              key={panel.label}
-              whileHover={{ scale: 1.05, y: -4 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
-              style={{
-                aspectRatio: '3/4',
-                backgroundColor: panel.color,
-                borderRadius: 6,
-                border: `1px solid ${palette.panelBorder}`,
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
-                padding: '8%',
-                cursor: 'pointer',
-                position: 'relative',
-                overflow: 'hidden',
-              }}
-            >
-              {/* Cowboy silhouette placeholder */}
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: '10%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  opacity: 0.15,
-                }}
-              >
-                <svg width="80%" height="80%" viewBox="0 0 100 120" fill="black">
-                  <circle cx="50" cy="20" r="12" />
-                  <ellipse cx="50" cy="15" rx="20" ry="4" />
-                  <rect x="40" y="32" width="20" height="40" rx="4" />
-                  <rect x="35" y="72" width="12" height="35" rx="3" />
-                  <rect x="53" y="72" width="12" height="35" rx="3" />
-                </svg>
-              </div>
-              <span
-                style={{
-                  fontFamily: '"Bebas Neue", sans-serif',
-                  fontSize: 'clamp(12px, 1.8vw, 20px)',
-                  color: '#000000',
-                  opacity: 0.7,
-                  letterSpacing: '0.1em',
-                  position: 'relative',
-                  zIndex: 1,
-                }}
-              >
-                {panel.label}
-              </span>
-            </motion.div>
-          ))}
-        </motion.div>
-
-        {/* Enter button */}
         <motion.button
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 1.2 }}
           whileHover={{ scale: 1.05 }}
           whileTap={{ scale: 0.97 }}
           style={{
             fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: 'clamp(11px, 1.2vw, 14px)',
+            fontSize: `clamp(9px, ${sw * 0.01}px, 13px)`,
             letterSpacing: '0.15em',
             textTransform: 'uppercase',
             backgroundColor: palette.enterBg,
             color: palette.enterText,
             border: 'none',
-            padding: '0.8em 2.5em',
-            borderRadius: 4,
+            padding: `${sh * 0.012}px ${sw * 0.03}px`,
+            borderRadius: 3,
             cursor: 'pointer',
           }}
         >
-          [ Enter Town ]
+          [ enter the town ]
         </motion.button>
       </div>
 
@@ -404,21 +457,21 @@ export function WesternTown() {
         transition={{ duration: 0.3 }}
         style={{
           position: 'absolute',
-          top: 16,
-          right: 16,
+          top: 10,
+          right: 10,
           zIndex: 20,
-          width: 40,
-          height: 40,
+          width: 32,
+          height: 32,
           borderRadius: '50%',
           border: 'none',
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 18,
+          fontSize: 14,
         }}
       >
-        {isNight ? '☀' : '☾'}
+        {isNight ? '\u2600' : '\u263E'}
       </motion.button>
     </div>
   )

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 // import { createPortal } from 'react-dom' // SNAKE SYSTEM — COMMENTED OUT
-import { motion } from 'framer-motion'
+// import { motion } from 'framer-motion' // Not used after CRT power-off refactor
 import { useUIStore } from '@/store/uiStore'
 import { BEZEL } from '@/config/bezel'
 // import { CELL_W, CELL_H, BODY_LENGTH, cellSeed } from '@/components/swarm/dragonEngine' // SNAKE SYSTEM — COMMENTED OUT
@@ -262,27 +262,16 @@ export function IntroAnimation() {
   const [showTyping,   setShowTyping]   = useState(false)
   const [typedText,    setTypedText]    = useState('')
   const [showBlink,    setShowBlink]    = useState(true)
-  const [introExiting, setIntroExiting] = useState(false)
+  // const [introExiting, setIntroExiting] = useState(false) // Replaced by CRT power-off
+
+  // CRT power-off sequence phases
+  type CRTPhase = 'idle' | 'collapseY' | 'collapseX' | 'dot' | 'black'
+  const [crtPhase, setCrtPhase] = useState<CRTPhase>('idle')
+  const [crtScaleY, setCrtScaleY] = useState(1)
+  const [crtScaleX, setCrtScaleX] = useState(1)
+  const [showDot, setShowDot] = useState(false)
 
   useEffect(() => { themeRef.current = theme }, [theme])
-
-  // ── Scroll lock — prevent any scrolling during intro ──────────────────────
-  useEffect(() => {
-    const html = document.documentElement
-    const body = document.body
-    html.style.overflow = 'hidden'
-    body.style.overflow = 'hidden'
-    // Block wheel + touch scroll events entirely
-    const prevent = (e: Event) => e.preventDefault()
-    window.addEventListener('wheel', prevent, { passive: false })
-    window.addEventListener('touchmove', prevent, { passive: false })
-    return () => {
-      html.style.overflow = ''
-      body.style.overflow = ''
-      window.removeEventListener('wheel', prevent)
-      window.removeEventListener('touchmove', prevent)
-    }
-  }, [])
 
   // ── Particle init ──────────────────────────────────────────────────────────
 
@@ -994,7 +983,7 @@ export function IntroAnimation() {
       setTypedText(fullText.slice(0, i))
       if (i >= fullText.length) {
         clearInterval(tid)
-        setTimeout(() => { setIntroExiting(true) }, 800)
+        setTimeout(() => { setCrtPhase('collapseY') }, 800)
       }
     }, 78)
     return () => clearInterval(tid)
@@ -1007,11 +996,66 @@ export function IntroAnimation() {
     return () => clearInterval(bid)
   }, [showTyping])
 
+  // ── CRT power-off sequence ────────────────────────────────────────────────
+  useEffect(() => {
+    if (crtPhase === 'idle') return
+
+    if (crtPhase === 'collapseY') {
+      // Phase 1: Vertical collapse over 400ms
+      const start = performance.now()
+      let raf = 0
+      function tick(now: number) {
+        const t = Math.min(1, (now - start) / 400)
+        const ease = t * t // easeIn for acceleration feel
+        setCrtScaleY(1 - ease * 0.98) // 1.0 → 0.02
+        if (t < 1) { raf = requestAnimationFrame(tick) }
+        else { setCrtPhase('collapseX') }
+      }
+      raf = requestAnimationFrame(tick)
+      return () => cancelAnimationFrame(raf)
+    }
+
+    if (crtPhase === 'collapseX') {
+      // Phase 2: Horizontal collapse over 150ms
+      const start = performance.now()
+      let raf = 0
+      function tick(now: number) {
+        const t = Math.min(1, (now - start) / 150)
+        setCrtScaleX(1 - t) // 1.0 → 0.0
+        if (t < 1) { raf = requestAnimationFrame(tick) }
+        else { setShowDot(true); setCrtPhase('dot') }
+      }
+      raf = requestAnimationFrame(tick)
+      return () => cancelAnimationFrame(raf)
+    }
+
+    if (crtPhase === 'dot') {
+      // Phase 3: White dot flash for 80ms
+      const timer = setTimeout(() => {
+        setShowDot(false)
+        setCrtPhase('black')
+      }, 80)
+      return () => clearTimeout(timer)
+    }
+
+    if (crtPhase === 'black') {
+      // Phase 4: Black screen for 200ms, then fire introComplete
+      const timer = setTimeout(() => {
+        setIntroComplete(true)
+        setIntroVisible(false)
+      }, 200)
+      return () => clearTimeout(timer)
+    }
+  }, [crtPhase, setIntroComplete, setIntroVisible])
+
   // ─── Render ────────────────────────────────────────────────────────────────
 
   const particleColor = theme === 'dark' ? '#ffffff' : '#000000'
-  const bgClass       = theme === 'dark' ? 'bg-black' : 'bg-white'
+  const bgColor       = theme === 'dark' ? '#000000' : '#ffffff'
   const { sw, sh }    = screenDims
+
+  // CRT off active = any phase past idle
+  const crtOff = crtPhase !== 'idle'
 
   return (
     <>
@@ -1026,57 +1070,85 @@ export function IntroAnimation() {
       )}
       */}
 
-      <motion.section
-        className={`relative overflow-hidden select-none ${bgClass}`}
+      <div
         style={{
           width:  sw > 0 ? `${Math.round(sw)}px` : '100%',
           height: sh > 0 ? `${Math.round(sh)}px` : '100vh',
-          cursor: 'crosshair',
-        }}
-        initial={{ y: 0 }}
-        animate={{ y: introExiting ? -Math.round(sh) : 0 }}
-        transition={{ duration: 0.6, ease: [0.4, 0, 1, 1] as const }}
-        onAnimationComplete={() => {
-          if (introExiting) {
-            setIntroComplete(true)
-            setIntroVisible(false)
-          }
+          position: 'relative',
+          overflow: 'hidden',
+          backgroundColor: bgColor,
         }}
       >
-        <canvas ref={canvasRef} className="absolute inset-0" />
+        {/* CRT collapse wrapper */}
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            transform: crtOff
+              ? `scaleY(${crtScaleY}) scaleX(${crtScaleX})`
+              : undefined,
+            transformOrigin: '50% 50%',
+            filter: crtOff && crtPhase === 'collapseY'
+              ? `brightness(${1 + crtScaleY < 0.5 ? (1 - crtScaleY) * 0.4 : 0})`
+              : undefined,
+            position: 'relative',
+            overflow: 'hidden',
+            cursor: 'crosshair',
+          }}
+        >
+          <canvas ref={canvasRef} className="absolute inset-0" />
 
-        {showTyping && (
-          <div
-            className="absolute inset-x-0 flex justify-center pointer-events-none"
-            style={{ top: '38%' }}
-          >
+          {showTyping && (
             <div
-              style={{
-                fontFamily: '"IBM Plex Mono", monospace',
-                fontSize: '15px',
-                color: particleColor,
-                letterSpacing: '0.06em',
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              className="absolute inset-x-0 flex justify-center pointer-events-none"
+              style={{ top: '38%' }}
             >
-              <span>{typedText}</span>
-              <span
+              <div
                 style={{
-                  display: 'inline-block',
-                  width: '9px',
-                  height: '17px',
-                  backgroundColor: particleColor,
-                  opacity: showBlink ? 1 : 0,
-                  marginLeft: '2px',
-                  verticalAlign: 'middle',
-                  flexShrink: 0,
+                  fontFamily: '"IBM Plex Mono", monospace',
+                  fontSize: '15px',
+                  color: particleColor,
+                  letterSpacing: '0.06em',
+                  display: 'flex',
+                  alignItems: 'center',
                 }}
-              />
+              >
+                <span>{typedText}</span>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '9px',
+                    height: '17px',
+                    backgroundColor: particleColor,
+                    opacity: showBlink ? 1 : 0,
+                    marginLeft: '2px',
+                    verticalAlign: 'middle',
+                    flexShrink: 0,
+                  }}
+                />
+              </div>
             </div>
-          </div>
+          )}
+        </div>
+
+        {/* White dot flash */}
+        {showDot && (
+          <div
+            style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: 20,
+              height: 20,
+              borderRadius: '50%',
+              backgroundColor: '#ffffff',
+              transform: 'translate(-50%, -50%)',
+              boxShadow: '0 0 30px 10px rgba(255,255,255,0.8)',
+              zIndex: 10,
+            }}
+          />
         )}
-      </motion.section>
+      </div>
     </>
   )
 }
