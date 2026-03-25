@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 // import { createPortal } from 'react-dom' // SNAKE SYSTEM — COMMENTED OUT
 // import { motion } from 'framer-motion' // Not used after CRT power-off refactor
 import { useUIStore } from '@/store/uiStore'
-import { BEZEL } from '@/config/bezel'
+import { useBezelContext } from '@/contexts/BezelContext'
+// import { BEZEL } from '@/config/bezel' // SNAKE SYSTEM — needed by computePathD (commented out)
 // import { CELL_W, CELL_H, BODY_LENGTH, cellSeed } from '@/components/swarm/dragonEngine' // SNAKE SYSTEM — COMMENTED OUT
 
 // ─── Programmatic grid generation (smooth diagonals via interpolation) ───────
@@ -90,19 +91,6 @@ const ZK_COLS    = LETTER_COLS + 2 + LETTER_COLS  // 50
 const Z_GRID = generateZGrid(ZK_ROWS, LETTER_COLS)
 const K_GRID = generateKGrid(ZK_ROWS, LETTER_COLS)
 const ZK_GRID: number[][] = Z_GRID.map((zRow, r) => [...zRow, 0, 0, ...K_GRID[r]])
-
-// ─── Bezel screen rect ────────────────────────────────────────────────────────
-
-interface ScreenRect { sl: number; st: number; sw: number; sh: number }
-
-function computeScreenRect(): ScreenRect {
-  return {
-    sl: (BEZEL.screen.left   / 100) * window.innerWidth,
-    st: (BEZEL.screen.top    / 100) * window.innerHeight,
-    sw: (BEZEL.screen.width  / 100) * window.innerWidth,
-    sh: (BEZEL.screen.height / 100) * window.innerHeight,
-  }
-}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -219,8 +207,9 @@ export function IntroAnimation() {
   const rafRef         = useRef<number>(0)
   const themeRef       = useRef(theme)
 
-  const screenRectRef  = useRef<ScreenRect>(computeScreenRect())
-  const [screenDims, setScreenDims] = useState<ScreenRect>(() => computeScreenRect())
+  const b = useBezelContext()
+  const bRef = useRef(b)
+  useEffect(() => { bRef.current = b }, [b])
 
   /* SNAKE SYSTEM — COMMENTED OUT
   const snakeSpineRef        = useRef<{x: number; y: number}[]>([])
@@ -319,51 +308,29 @@ export function IntroAnimation() {
     wallStateRef.current = { state: 'floating', wall: 'left', frame: 0, entrySpeed: 0, crossVel: 0, cooldownWall: null, cooldownFrames: 0 }
   }
 
+  // ── Canvas resize — sync canvas px dimensions to bezel bounds ─────────────
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    canvas.width  = Math.round(b.width)
+    canvas.height = Math.round(b.height)
+    if (phaseRef.current === 'screensaver') {
+      bouncePosRef.current = { x: b.width / 2, y: b.height / 2 }
+    }
+  }, [b.width, b.height])
+
   // ── RAF loop ───────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    function resize() {
-      if (!canvas) return
-      const rect = computeScreenRect()
-      screenRectRef.current = rect
-      setScreenDims(rect)
+    // Canvas dimensions are driven by the b.width/b.height useEffect below.
+    // Set initial size here so initParticles has correct dimensions on mount.
+    canvas.width  = Math.round(bRef.current.width)
+    canvas.height = Math.round(bRef.current.height)
 
-      canvas.width  = Math.round(rect.sw)
-      canvas.height = Math.round(rect.sh)
-
-      /* SNAKE SYSTEM — COMMENTED OUT
-      if (swarmCanvasRef.current) {
-        swarmCanvasRef.current.width  = window.innerWidth
-        swarmCanvasRef.current.height = window.innerHeight
-      }
-      */
-
-      if (phaseRef.current === 'screensaver') {
-        bouncePosRef.current = { x: rect.sw / 2, y: rect.sh / 2 }
-      }
-
-      /* SNAKE SYSTEM — COMMENTED OUT
-      if (svgPathRef.current) {
-        svgPathRef.current.setAttribute('d', computePathD())
-        svgTotalLengthRef.current = svgPathRef.current.getTotalLength()
-        snakeSpineRef.current.length = 0
-        snakeModeRef.current = 'path'
-        idleFrameCountRef.current = 0
-        velocityHistoryRef.current.length = 0
-        const parentSvg = svgPathRef.current.ownerSVGElement
-        if (parentSvg) {
-          parentSvg.setAttribute('width', String(window.innerWidth))
-          parentSvg.setAttribute('height', String(window.innerHeight))
-        }
-      }
-      */
-    }
-
-    resize()
-    window.addEventListener('resize', resize)
     initParticles(canvas.width, canvas.height)
     phaseRef.current = 'screensaver'
 
@@ -919,7 +886,6 @@ export function IntroAnimation() {
     rafRef.current = requestAnimationFrame(loop)
     return () => {
       cancelAnimationFrame(rafRef.current)
-      window.removeEventListener('resize', resize)
       /* SNAKE SYSTEM — COMMENTED OUT
       if (svgPathRef.current?.ownerSVGElement) {
         document.body.removeChild(svgPathRef.current.ownerSVGElement)
@@ -1052,7 +1018,8 @@ export function IntroAnimation() {
 
   const particleColor = theme === 'dark' ? '#ffffff' : '#000000'
   const bgColor       = theme === 'dark' ? '#000000' : '#ffffff'
-  const { sw, sh }    = screenDims
+  const sw = b.width
+  const sh = b.height
 
   // CRT off active = any phase past idle
   const crtOff = crtPhase !== 'idle'

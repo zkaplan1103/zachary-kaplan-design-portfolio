@@ -3,13 +3,18 @@ import { ReactLenis } from 'lenis/react'
 import { useUIStore } from '@/store/uiStore'
 import { router } from '@/router'
 import { CRTScreen } from '@/components/layout/CRTScreen'
+import { BezelProvider } from '@/contexts/BezelContext'
+import { BezelContainer } from '@/components/BezelContainer'
 
 export default function App() {
   const theme = useUIStore(s => s.theme)
   const dark  = theme === 'dark'
 
   return (
-    <>
+    <BezelProvider>
+      {/* Debug overlay — visible only at ?debug=bezel, zero footprint otherwise */}
+      <BezelContainer zIndex={99} style={{ pointerEvents: 'none', background: 'transparent' }} />
+
       {/*
        * CRTScreen manages:
        *   - Monitor PNG at z:100 (object-fit:contain, covers full viewport)
@@ -26,6 +31,6 @@ export default function App() {
           <RouterProvider router={router} />
         </ReactLenis>
       </CRTScreen>
-    </>
+    </BezelProvider>
   )
 }

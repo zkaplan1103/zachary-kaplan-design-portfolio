@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { BEZEL } from '@/config/bezel'
+import { useBezelContext } from '@/contexts/BezelContext'
 
 // ─── Day/Night color palettes ───────────────────────────────────────────────
 
@@ -83,19 +83,6 @@ const BUILDINGS = [
   { w: 8,  h: 50, type: 'general',    hasSign: false, windows: 2 },
 ]
 
-// ─── Bezel rect helper ──────────────────────────────────────────────────────
-
-function getBezelRect() {
-  const vw = window.innerWidth
-  const vh = window.innerHeight
-  return {
-    sl: (BEZEL.screen.left / 100) * vw,
-    st: (BEZEL.screen.top / 100) * vh,
-    sw: (BEZEL.screen.width / 100) * vw,
-    sh: (BEZEL.screen.height / 100) * vh,
-  }
-}
-
 // ─── Transition config ──────────────────────────────────────────────────────
 
 const CROSSFADE_DURATION = 0.8
@@ -104,18 +91,11 @@ const CROSSFADE_DURATION = 0.8
 
 export function WesternTown() {
   const [isNight, setIsNight] = useState(true)
-  const [bezel, setBezel] = useState(getBezelRect)
   const [parallaxX, setParallaxX] = useState(0)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  const b = useBezelContext()
   const palette = isNight ? NIGHT : DAY
-
-  // Resize handler
-  useEffect(() => {
-    function onResize() { setBezel(getBezelRect()) }
-    window.addEventListener('resize', onResize)
-    return () => window.removeEventListener('resize', onResize)
-  }, [])
 
   // Mouse parallax
   const onMouseMove = useCallback((e: React.MouseEvent) => {
@@ -126,7 +106,8 @@ export function WesternTown() {
     setParallaxX(normalizedX * -12)
   }, [])
 
-  const { sw, sh } = bezel
+  const sw = b.width
+  const sh = b.height
 
   return (
     <div
