@@ -24,6 +24,9 @@ const DAY = {
   celestialGlow: 'rgba(255,200,60,0.35)',
   windowLit: 'rgba(0,0,0,0.12)',
   windowDark: 'rgba(0,0,0,0.06)',
+  titleRule: 'rgba(100,50,10,0.7)',
+  titleEst: 'rgba(80,40,10,0.6)',
+  titleSub: 'rgba(100,60,20,0.55)',
 }
 
 const NIGHT = {
@@ -46,16 +49,17 @@ const NIGHT = {
   celestialGlow: 'rgba(180,200,255,0.25)',
   windowLit: 'rgba(255,180,60,0.6)',
   windowDark: 'rgba(255,180,60,0.15)',
+  titleRule: 'rgba(200,120,40,0.7)',
+  titleEst: 'rgba(180,100,40,0.6)',
+  titleSub: 'rgba(200,140,60,0.55)',
 }
 
-// ─── Panel data ─────────────────────────────────────────────────────────────
+// ─── Title card grid colors (decorative only) ──────────────────────────────
 
-const PANELS = [
-  { color: '#F2C94C', label: 'DESIGN' },
-  { color: '#EB5757', label: 'DEVELOP' },
-  { color: '#27AE60', label: 'DEPLOY' },
-  { color: '#2D9CDB', label: 'DELIVER' },
-]
+const TITLE_GRID_NIGHT = ['#3d2a10', '#2a1540', '#102a14', '#101840']
+const TITLE_GRID_DAY = ['#c4821a', '#8b3a1a', '#4a6b1a', '#1a4a6b']
+
+const SCANLINE_TEXTURE = `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.12) 3px, rgba(0,0,0,0.12) 4px)`
 
 // ─── Stars ──────────────────────────────────────────────────────────────────
 
@@ -122,18 +126,15 @@ export function WesternTown() {
     setParallaxX(normalizedX * -12)
   }, [])
 
-  const { sl, st, sw, sh } = bezel
+  const { sw, sh } = bezel
 
   return (
     <div
       ref={containerRef}
       onMouseMove={onMouseMove}
       style={{
-        position: 'fixed',
-        left: sl,
-        top: st,
-        width: sw,
-        height: sh,
+        position: 'absolute',
+        inset: 0,
         overflow: 'hidden',
         cursor: 'default',
       }}
@@ -200,117 +201,152 @@ export function WesternTown() {
       />
 
       {/* ════════════════════════════════════════════════════════════
-          TOP ZONE — TITLE CARD (sky region)
+          TOP ZONE — SMALL DECORATIVE TITLE CARD + ENTER BUTTON
           ════════════════════════════════════════════════════════════ */}
-      <div
+      <motion.div
+        initial={{ opacity: 0, y: -6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.3, ease: 'easeOut' as const }}
         style={{
           position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: '40%',
+          top: '5%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 10,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          zIndex: 10,
-          paddingTop: '4%',
+          gap: 6,
+          pointerEvents: 'none',
         }}
       >
-        {/* 2x2 Panel Grid */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.92 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5, delay: 0.2, ease: 'easeOut' as const }}
+        {/* Small 2x2 logo mark */}
+        <div
           style={{
+            width: Math.min(160, sw * 0.14),
+            aspectRatio: '1',
             display: 'grid',
-            gridTemplateColumns: 'repeat(2, 1fr)',
-            gap: Math.max(3, sh * 0.008),
-            width: sw * 0.38,
-            maxWidth: 320,
+            gridTemplateColumns: '1fr 1fr',
+            gridTemplateRows: '1fr 1fr',
+            gap: 0,
+            border: `2px solid ${palette.panelBorder}`,
             position: 'relative',
+            overflow: 'hidden',
+            flexShrink: 0,
           }}
         >
-          {PANELS.map((panel) => (
-            <motion.div
-              key={panel.label}
-              whileHover={{ scale: 1.05, y: -2 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+          {(isNight ? TITLE_GRID_NIGHT : TITLE_GRID_DAY).map((color, i) => (
+            <div
+              key={i}
               style={{
-                aspectRatio: '1',
-                backgroundColor: panel.color,
-                borderRadius: 4,
-                border: `1px solid ${palette.panelBorder}`,
-                display: 'flex',
-                alignItems: 'flex-end',
-                justifyContent: 'center',
-                padding: '6%',
-                cursor: 'pointer',
-                position: 'relative',
-                overflow: 'hidden',
+                backgroundColor: color,
+                backgroundImage: SCANLINE_TEXTURE,
+                transition: `background-color ${CROSSFADE_DURATION}s`,
               }}
-            >
-              <span
-                style={{
-                  fontFamily: '"Bebas Neue", sans-serif',
-                  fontSize: `clamp(8px, ${sw * 0.011}px, 15px)`,
-                  color: '#000000',
-                  opacity: 0.65,
-                  letterSpacing: '0.08em',
-                }}
-              >
-                {panel.label}
-              </span>
-            </motion.div>
+            />
           ))}
 
-          {/* ZK DESIGNS overlay */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4, delay: 0.5 }}
+          {/* ZK DESIGNS text on grid */}
+          <div
             style={{
               position: 'absolute',
               inset: 0,
               display: 'flex',
-              flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'center',
-              pointerEvents: 'none',
             }}
           >
             <h1
               style={{
                 fontFamily: '"Bebas Neue", sans-serif',
-                fontSize: `clamp(26px, ${sw * 0.038}px, 50px)`,
-                color: palette.text,
-                textShadow: `1px 1px 6px ${palette.textShadow}`,
-                letterSpacing: '0.1em',
+                fontSize: `clamp(18px, ${sw * 0.018}px, 26px)`,
+                color: '#FFFFFF',
+                letterSpacing: '0.06em',
+                textShadow: '1px 1px 0 rgba(0,0,0,0.9), 2px 2px 0 rgba(0,0,0,0.6), 0 0 12px rgba(255,180,80,0.4)',
                 lineHeight: 1,
                 margin: 0,
+                whiteSpace: 'nowrap',
               }}
             >
               ZK DESIGNS
             </h1>
-          </motion.div>
-        </motion.div>
+          </div>
+        </div>
 
-        {/* Subtitle below grid */}
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.4, delay: 0.7 }}
+        {/* Thin rule */}
+        <div style={{ width: '100%', height: 1, backgroundColor: palette.titleRule, transition: `background-color ${CROSSFADE_DURATION}s` }} />
+
+        {/* EST tagline */}
+        <p
           style={{
             fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: `clamp(7px, ${sw * 0.009}px, 11px)`,
-            color: palette.subtitle,
+            fontSize: 7,
             letterSpacing: '0.2em',
+            color: palette.titleEst,
+            textAlign: 'center',
+            margin: 0,
             textTransform: 'uppercase',
-            marginTop: sh * 0.012,
+            transition: `color ${CROSSFADE_DURATION}s`,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          est. 2024 &#10022; population: 1
+        </p>
+      </motion.div>
+
+      {/* ── Enter button — centered in sky, below title card ────── */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.9 }}
+        style={{
+          position: 'absolute',
+          top: '32%',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 10,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <motion.button
+          whileHover={{ scale: 1.06, y: -2 }}
+          whileTap={{ scale: 0.96 }}
+          style={{
+            fontFamily: '"IBM Plex Mono", monospace',
+            fontSize: `clamp(9px, ${sw * 0.01}px, 13px)`,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            backgroundColor: palette.enterBg,
+            color: palette.enterText,
+            border: 'none',
+            padding: `${sh * 0.014}px ${sw * 0.032}px`,
+            borderRadius: 3,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          [ enter the town ]
+        </motion.button>
+
+        <p
+          style={{
+            fontFamily: '"IBM Plex Mono", monospace',
+            fontSize: 8,
+            letterSpacing: '0.2em',
+            color: palette.titleSub,
+            textAlign: 'center',
+            margin: 0,
+            textTransform: 'uppercase',
+            transition: `color ${CROSSFADE_DURATION}s`,
+            whiteSpace: 'nowrap',
           }}
         >
           frontend designer / developer
-        </motion.p>
-      </div>
+        </p>
+      </motion.div>
 
       {/* ════════════════════════════════════════════════════════════
           MIDDLE ZONE — BUILDING SILHOUETTES (parallax)
@@ -320,14 +356,14 @@ export function WesternTown() {
         transition={{ type: 'spring', stiffness: 120, damping: 25 }}
         style={{
           position: 'absolute',
-          bottom: '12%',
+          bottom: '10%',
           left: '-2%',
           right: '-2%',
-          height: '38%',
+          height: '24%',
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'center',
-          gap: sw * 0.004,
+          gap: sw * 0.003,
           pointerEvents: 'none',
         }}
       >
@@ -482,60 +518,29 @@ export function WesternTown() {
         }}
       />
 
-      {/* Ground content: tagline + enter button */}
-      <div
+      {/* Ground tagline */}
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.9 }}
         style={{
           position: 'absolute',
-          bottom: 0,
+          bottom: '1.5%',
           left: 0,
           right: 0,
-          height: '12%',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
+          textAlign: 'center',
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: `clamp(6px, ${sw * 0.006}px, 8px)`,
+          color: palette.footerText,
+          letterSpacing: '0.25em',
+          textTransform: 'uppercase',
+          margin: 0,
           zIndex: 10,
-          gap: sh * 0.01,
+          pointerEvents: 'none',
         }}
       >
-        <motion.p
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.9 }}
-          style={{
-            fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: `clamp(6px, ${sw * 0.007}px, 9px)`,
-            color: palette.footerText,
-            letterSpacing: '0.25em',
-            textTransform: 'uppercase',
-            margin: 0,
-          }}
-        >
-          est. 2024 &#10022; population: 1
-        </motion.p>
-
-        <motion.button
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, delay: 1.1, ease: 'easeOut' as const }}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.97 }}
-          style={{
-            fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: `clamp(8px, ${sw * 0.009}px, 12px)`,
-            letterSpacing: '0.15em',
-            textTransform: 'uppercase',
-            backgroundColor: palette.enterBg,
-            color: palette.enterText,
-            border: 'none',
-            padding: `${sh * 0.01}px ${sw * 0.025}px`,
-            borderRadius: 3,
-            cursor: 'pointer',
-          }}
-        >
-          [ enter the town ]
-        </motion.button>
-      </div>
+        est. 2024 &#10022; population: 1
+      </motion.p>
 
       {/* ── Day/Night toggle ─────────────────────────────────────── */}
       <motion.button

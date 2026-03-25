@@ -1001,13 +1001,13 @@ export function IntroAnimation() {
     if (crtPhase === 'idle') return
 
     if (crtPhase === 'collapseY') {
-      // Phase 1: Vertical collapse over 400ms
+      // Phase 1: Vertical collapse over 500ms (ease-in)
       const start = performance.now()
       let raf = 0
       function tick(now: number) {
-        const t = Math.min(1, (now - start) / 400)
-        const ease = t * t // easeIn for acceleration feel
-        setCrtScaleY(1 - ease * 0.98) // 1.0 → 0.02
+        const t = Math.min(1, (now - start) / 500)
+        const ease = t * t // easeIn — accelerates into collapse
+        setCrtScaleY(1 - ease * 0.985) // 1.0 → 0.015
         if (t < 1) { raf = requestAnimationFrame(tick) }
         else { setCrtPhase('collapseX') }
       }
@@ -1030,20 +1030,20 @@ export function IntroAnimation() {
     }
 
     if (crtPhase === 'dot') {
-      // Phase 3: White dot flash for 80ms
+      // Phase 3: White dot flash for 100ms
       const timer = setTimeout(() => {
         setShowDot(false)
         setCrtPhase('black')
-      }, 80)
+      }, 100)
       return () => clearTimeout(timer)
     }
 
     if (crtPhase === 'black') {
-      // Phase 4: Black screen for 200ms, then fire introComplete
+      // Phase 4: Black screen for 250ms, then fire introComplete
       const timer = setTimeout(() => {
         setIntroComplete(true)
         setIntroVisible(false)
-      }, 200)
+      }, 250)
       return () => clearTimeout(timer)
     }
   }, [crtPhase, setIntroComplete, setIntroVisible])
