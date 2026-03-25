@@ -1,141 +1,143 @@
 import { useState, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useBezelContext } from '@/contexts/BezelContext'
+import { PokemonTextBox } from '@/components/PokemonTextBox'
 
-// ─── Day/Night color palettes ───────────────────────────────────────────────
+// ─── Sky gradients (5-stop warm sunset) ─────────────────────────────────────
+
+const NIGHT_SKY = 'linear-gradient(180deg, #0a0612 0%, #1a0a2e 20%, #2d1a0a 55%, #3d2008 75%, #1a0d04 100%)'
+const DAY_SKY = 'linear-gradient(180deg, #1a3a5c 0%, #2d6a8a 15%, #87CEEB 45%, #FDB97D 75%, #F4A460 100%)'
+
+// ─── Ground gradients ───────────────────────────────────────────────────────
+
+const NIGHT_GROUND = 'linear-gradient(180deg, #2d1a04 0%, #0a0804 100%)'
+const DAY_GROUND = 'linear-gradient(180deg, #C4A050 0%, #8B6914 100%)'
+
+// ─── Palette tokens ─────────────────────────────────────────────────────────
 
 const DAY = {
-  skyTop: '#87CEEB',
-  skyBot: '#F2C94C',
-  ground: '#C4A04A',
-  groundEdge: '#8B7332',
-  text: '#1a1207',
-  textShadow: 'rgba(0,0,0,0.25)',
-  panelBorder: 'rgba(26,18,7,0.3)',
+  building: '#5a3a10',
+  buildingBorderTop: 'rgba(255,150,50,0.1)',
+  windowBg: '#ffe082',
+  windowGlow: 'none',
+  tumbleweed: '#8B6914',
   toggleBg: '#1a1207',
   toggleText: '#F2C94C',
-  tumbleweed: '#8B6914',
-  subtitle: 'rgba(26,18,7,0.6)',
-  enterBg: '#1a1207',
-  enterText: '#F2C94C',
-  building: '#3a2a14',
-  buildingLight: '#5a4020',
   footerText: 'rgba(26,18,7,0.45)',
-  celestialGlow: 'rgba(255,200,60,0.35)',
-  windowLit: 'rgba(0,0,0,0.12)',
-  windowDark: 'rgba(0,0,0,0.06)',
-  titleRule: 'rgba(100,50,10,0.7)',
-  titleEst: 'rgba(80,40,10,0.6)',
-  titleSub: 'rgba(100,60,20,0.55)',
+  panelBorder: 'rgba(26,18,7,0.3)',
+  estText: 'rgba(80,40,10,0.6)',
+  roleText: 'rgba(100,60,20,0.55)',
 }
 
 const NIGHT = {
-  skyTop: '#0a0e1a',
-  skyBot: '#1a1e3a',
-  ground: '#1a1610',
-  groundEdge: '#0d0b08',
-  text: '#f0efe9',
-  textShadow: 'rgba(0,0,0,0.6)',
-  panelBorder: 'rgba(240,239,233,0.15)',
+  building: '#1a0d04',
+  buildingBorderTop: 'rgba(255,150,50,0.1)',
+  windowBg: '#ff8c00',
+  windowGlow: '0 0 8px rgba(255,140,0,0.53), 0 0 16px rgba(204,102,0,0.27)',
+  tumbleweed: '#5a4a2a',
   toggleBg: '#f0efe9',
   toggleText: '#0a0e1a',
-  tumbleweed: '#5a4a2a',
-  subtitle: 'rgba(240,239,233,0.5)',
-  enterBg: '#f0efe9',
-  enterText: '#0a0e1a',
-  building: '#0d0b08',
-  buildingLight: '#1a1610',
   footerText: 'rgba(240,239,233,0.35)',
-  celestialGlow: 'rgba(180,200,255,0.25)',
-  windowLit: 'rgba(255,180,60,0.6)',
-  windowDark: 'rgba(255,180,60,0.15)',
-  titleRule: 'rgba(200,120,40,0.7)',
-  titleEst: 'rgba(180,100,40,0.6)',
-  titleSub: 'rgba(200,140,60,0.55)',
+  panelBorder: 'rgba(240,239,233,0.15)',
+  estText: 'rgba(180,100,40,0.6)',
+  roleText: 'rgba(200,140,60,0.55)',
 }
 
-// ─── Title card grid colors (decorative only) ──────────────────────────────
+// ─── Title card grid colors ─────────────────────────────────────────────────
 
-const TITLE_GRID_NIGHT = ['#3d2a10', '#2a1540', '#102a14', '#101840']
+const TITLE_GRID_NIGHT = ['#3d2a08', '#2a0a1a', '#0a1a08', '#0a0a2a']
 const TITLE_GRID_DAY = ['#c4821a', '#8b3a1a', '#4a6b1a', '#1a4a6b']
 
-const SCANLINE_TEXTURE = `repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.12) 3px, rgba(0,0,0,0.12) 4px)`
+const SCANLINE_TEXTURE =
+  'repeating-linear-gradient(0deg, transparent, transparent 3px, rgba(0,0,0,0.1) 3px, rgba(0,0,0,0.1) 4px)'
 
 // ─── Stars ──────────────────────────────────────────────────────────────────
 
-const STARS = Array.from({ length: 14 }, () => ({
+const STARS = Array.from({ length: 18 }, () => ({
   x: Math.random() * 100,
-  y: Math.random() * 40,
+  y: Math.random() * 50,
   size: 1 + Math.random() * 1.5,
   delay: Math.random() * 3,
   duration: 2 + Math.random() * 2,
 }))
 
-// ─── Building silhouettes ───────────────────────────────────────────────────
-// Each building: w (% of container), h (% of building zone), type for shape
+// ─── Buildings ──────────────────────────────────────────────────────────────
+// Heights are % of sh (14-22%). Width is % of container.
 
 const BUILDINGS = [
-  { w: 8,  h: 55, type: 'telegraph',  hasSign: false, windows: 2 },
-  { w: 11, h: 70, type: 'sheriff',    hasSign: true,  windows: 3 },
-  { w: 9,  h: 60, type: 'smithy',     hasSign: false, windows: 2 },
-  { w: 14, h: 90, type: 'saloon',     hasSign: true,  windows: 4 },
-  { w: 12, h: 75, type: 'bank',       hasSign: true,  windows: 3 },
-  { w: 8,  h: 50, type: 'general',    hasSign: false, windows: 2 },
+  { id: 'telegraph', w: 13, hPct: 0.15, windows: 2, hasSign: false, hasPeak: false },
+  { id: 'sheriff',   w: 16, hPct: 0.19, windows: 3, hasSign: true,  hasPeak: false },
+  { id: 'smithy',    w: 14, hPct: 0.16, windows: 2, hasSign: false, hasPeak: false },
+  { id: 'saloon',    w: 18, hPct: 0.22, windows: 4, hasSign: true,  hasPeak: true  },
+  { id: 'bank',      w: 16, hPct: 0.20, windows: 3, hasSign: true,  hasPeak: false },
+  { id: 'general',   w: 13, hPct: 0.14, windows: 2, hasSign: false, hasPeak: false },
 ]
 
-// ─── Transition config ──────────────────────────────────────────────────────
+// ─── Transition ─────────────────────────────────────────────────────────────
 
-const CROSSFADE_DURATION = 0.8
+const CROSS = 1.5 // 1.5s day/night transition
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function WesternTown() {
   const [isNight, setIsNight] = useState(true)
-  const [parallaxX, setParallaxX] = useState(0)
+  const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const [mouseNorm, setMouseNorm] = useState(0) // -1 to 1
 
   const b = useBezelContext()
   const palette = isNight ? NIGHT : DAY
+  const sw = b.width
+  const sh = b.height
 
-  // Mouse parallax
+  // ── Grid dimensions (2:1 aspect, capped at 80% screen width for mobile) ─
+  const gridNatural = sh * 0.26 * 2.1
+  const gridWidth = Math.min(gridNatural, sw * 0.8)
+  const gridHeight = gridWidth / 2.1
+  const gridCapped = gridNatural > sw * 0.8 // true on narrow/mobile viewports
+
+  // ── Mouse parallax ──────────────────────────────────────────────────────
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
-    const centerX = rect.left + rect.width / 2
-    const normalizedX = (e.clientX - centerX) / (rect.width / 2)
-    setParallaxX(normalizedX * -12)
+    const norm = (e.clientX - rect.left) / rect.width - 0.5 // -0.5 to 0.5
+    setMouseNorm(norm * 2) // -1 to 1
   }, [])
 
-  const sw = b.width
-  const sh = b.height
+  const skyX = mouseNorm * -15
+  const buildingsX = mouseNorm * -30
+  const groundX = mouseNorm * -45
 
   return (
     <div
       ref={containerRef}
       onMouseMove={onMouseMove}
-      style={{
-        position: 'absolute',
-        inset: 0,
-        overflow: 'hidden',
-        cursor: 'default',
-      }}
+      style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'default' }}
     >
-      {/* ── Sky gradient ─────────────────────────────────────────── */}
+      {/* ═══════ z:0 — SKY GRADIENT (parallax layer 1) ═══════ */}
       <motion.div
-        animate={{ background: `linear-gradient(to bottom, ${palette.skyTop}, ${palette.skyBot})` }}
-        transition={{ duration: CROSSFADE_DURATION }}
-        style={{ position: 'absolute', inset: 0 }}
+        animate={{ background: isNight ? NIGHT_SKY : DAY_SKY }}
+        transition={{ duration: CROSS }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 0,
+          transform: `translateX(${skyX}px)`,
+          width: '115%',
+          left: '-7.5%',
+          transition: `transform 0.3s ease-out`,
+        }}
       />
 
-      {/* ── Stars (night only) ───────────────────────────────────── */}
+      {/* ═══════ z:1 — STARS (night only) ═══════ */}
       <AnimatePresence>
         {isNight && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: CROSSFADE_DURATION }}
-            style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+            transition={{ duration: CROSS }}
+            style={{ position: 'absolute', inset: 0, zIndex: 1, pointerEvents: 'none' }}
           >
             {STARS.map((star, i) => (
               <motion.div
@@ -157,10 +159,9 @@ export function WesternTown() {
         )}
       </AnimatePresence>
 
-      {/* ── Celestial body (moon at night / sun during day) ───────── */}
+      {/* ═══════ z:2 — CELESTIAL BODY ═══════ */}
       <motion.div
         animate={{
-          opacity: 1,
           background: isNight
             ? 'radial-gradient(circle, #e8e4d4 0%, #c8c0a8 40%, transparent 70%)'
             : 'radial-gradient(circle, #fff8e0 0%, #FFD700 35%, #FFA500 65%, transparent 85%)',
@@ -168,11 +169,11 @@ export function WesternTown() {
             ? '0 0 40px 12px rgba(200,192,168,0.3), 0 0 80px 24px rgba(200,192,168,0.15)'
             : '0 0 50px 15px rgba(255,200,60,0.4), 0 0 100px 40px rgba(255,200,60,0.2)',
         }}
-        transition={{ duration: CROSSFADE_DURATION }}
+        transition={{ duration: CROSS }}
         style={{
           position: 'absolute',
           top: isNight ? '8%' : '6%',
-          right: isNight ? '15%' : '12%',
+          right: isNight ? '12%' : '10%',
           width: isNight ? Math.max(28, sw * 0.035) : Math.max(36, sw * 0.045),
           height: isNight ? Math.max(28, sw * 0.035) : Math.max(36, sw * 0.045),
           borderRadius: '50%',
@@ -181,19 +182,17 @@ export function WesternTown() {
         }}
       />
 
-      {/* ════════════════════════════════════════════════════════════
-          TOP ZONE — SMALL DECORATIVE TITLE CARD + ENTER BUTTON
-          ════════════════════════════════════════════════════════════ */}
+      {/* ═══════ z:8 — 2×2 TITLE CARD ═══════ */}
       <motion.div
-        initial={{ opacity: 0, y: -6 }}
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, delay: 0.3, ease: 'easeOut' as const }}
+        transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' as const }}
         style={{
           position: 'absolute',
-          top: '5%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 10,
+          top: sh * 0.06,
+          left: 0,
+          right: 0,
+          zIndex: 8,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
@@ -201,19 +200,17 @@ export function WesternTown() {
           pointerEvents: 'none',
         }}
       >
-        {/* Small 2x2 logo mark */}
+        {/* The 2×2 grid — wider than tall */}
         <div
           style={{
-            width: Math.min(160, sw * 0.14),
-            aspectRatio: '1',
+            width: gridWidth,
+            height: gridHeight,
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             gridTemplateRows: '1fr 1fr',
-            gap: 0,
-            border: `2px solid ${palette.panelBorder}`,
+            border: '2px solid rgba(0,0,0,0.5)',
             position: 'relative',
             overflow: 'hidden',
-            flexShrink: 0,
           }}
         >
           {(isNight ? TITLE_GRID_NIGHT : TITLE_GRID_DAY).map((color, i) => (
@@ -222,12 +219,12 @@ export function WesternTown() {
               style={{
                 backgroundColor: color,
                 backgroundImage: SCANLINE_TEXTURE,
-                transition: `background-color ${CROSSFADE_DURATION}s`,
+                transition: `background-color ${CROSS}s`,
               }}
             />
           ))}
 
-          {/* ZK DESIGNS text on grid */}
+          {/* ZK DESIGNS overlay */}
           <div
             style={{
               position: 'absolute',
@@ -240,13 +237,14 @@ export function WesternTown() {
             <h1
               style={{
                 fontFamily: '"Bebas Neue", sans-serif',
-                fontSize: `clamp(18px, ${sw * 0.018}px, 26px)`,
+                fontSize: gridCapped ? gridWidth * 0.20 : gridHeight * 0.55,
                 color: '#FFFFFF',
                 letterSpacing: '0.06em',
-                textShadow: '1px 1px 0 rgba(0,0,0,0.9), 2px 2px 0 rgba(0,0,0,0.6), 0 0 12px rgba(255,180,80,0.4)',
+                textShadow: '2px 2px 0 rgba(0,0,0,0.9), 5px 5px 0 rgba(0,0,0,0.5)',
                 lineHeight: 1,
                 margin: 0,
                 whiteSpace: 'nowrap',
+                userSelect: 'none',
               }}
             >
               ZK DESIGNS
@@ -254,74 +252,34 @@ export function WesternTown() {
           </div>
         </div>
 
-        {/* Thin rule */}
-        <div style={{ width: '100%', height: 1, backgroundColor: palette.titleRule, transition: `background-color ${CROSSFADE_DURATION}s` }} />
-
-        {/* EST tagline */}
+        {/* EST line */}
         <p
           style={{
             fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: 7,
+            fontSize: 9,
             letterSpacing: '0.2em',
-            color: palette.titleEst,
+            color: palette.estText,
             textAlign: 'center',
             margin: 0,
             textTransform: 'uppercase',
-            transition: `color ${CROSSFADE_DURATION}s`,
+            transition: `color ${CROSS}s`,
             whiteSpace: 'nowrap',
           }}
         >
           est. 2024 &#10022; population: 1
         </p>
-      </motion.div>
 
-      {/* ── Enter button — centered in sky, below title card ────── */}
-      <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.9 }}
-        style={{
-          position: 'absolute',
-          top: '32%',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 10,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 8,
-        }}
-      >
-        <motion.button
-          whileHover={{ scale: 1.06, y: -2 }}
-          whileTap={{ scale: 0.96 }}
-          style={{
-            fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: `clamp(9px, ${sw * 0.01}px, 13px)`,
-            letterSpacing: '0.18em',
-            textTransform: 'uppercase',
-            backgroundColor: palette.enterBg,
-            color: palette.enterText,
-            border: 'none',
-            padding: `${sh * 0.014}px ${sw * 0.032}px`,
-            borderRadius: 3,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          [ enter the town ]
-        </motion.button>
-
+        {/* Role line */}
         <p
           style={{
             fontFamily: '"IBM Plex Mono", monospace',
-            fontSize: 8,
-            letterSpacing: '0.2em',
-            color: palette.titleSub,
+            fontSize: 9,
+            letterSpacing: '0.18em',
+            color: palette.roleText,
             textAlign: 'center',
             margin: 0,
             textTransform: 'uppercase',
-            transition: `color ${CROSSFADE_DURATION}s`,
+            transition: `color ${CROSS}s`,
             whiteSpace: 'nowrap',
           }}
         >
@@ -329,215 +287,181 @@ export function WesternTown() {
         </p>
       </motion.div>
 
-      {/* ════════════════════════════════════════════════════════════
-          MIDDLE ZONE — BUILDING SILHOUETTES (parallax)
-          ════════════════════════════════════════════════════════════ */}
-      <motion.div
-        animate={{ x: parallaxX }}
-        transition={{ type: 'spring', stiffness: 120, damping: 25 }}
+      {/* ═══════ z:4 — BUILDINGS (parallax layer 2) ═══════ */}
+      <div
         style={{
           position: 'absolute',
-          bottom: '10%',
-          left: '-2%',
-          right: '-2%',
-          height: '24%',
+          bottom: sh * 0.10,
+          left: '-7.5%',
+          width: '115%',
+          height: sh * 0.25,
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'center',
-          gap: sw * 0.003,
-          pointerEvents: 'none',
+          gap: sw * 0.005,
+          zIndex: 4,
+          transform: `translateX(${buildingsX}px)`,
+          transition: 'transform 0.3s ease-out',
         }}
       >
-        {BUILDINGS.map((b, i) => (
-          <motion.div
-            key={i}
-            animate={{ backgroundColor: palette.building }}
-            transition={{ duration: CROSSFADE_DURATION }}
-            style={{
-              width: `${b.w}%`,
-              height: `${b.h}%`,
-              borderRadius: '2px 2px 0 0',
-              position: 'relative',
-              flexShrink: 0,
-            }}
-          >
-            {/* Peaked roof for saloon */}
-            {b.type === 'saloon' && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: -8,
-                  left: '20%',
-                  right: '20%',
-                  height: 8,
-                  backgroundColor: isNight ? '#0d0b08' : '#3a2a14',
-                  clipPath: 'polygon(0 100%, 50% 0, 100% 100%)',
-                  transition: `background-color ${CROSSFADE_DURATION}s`,
-                }}
-              />
-            )}
-
-            {/* Window grid */}
-            {Array.from({ length: b.windows }).map((_, row) => (
-              <div key={row} style={{ display: 'flex', justifyContent: 'space-evenly', paddingTop: '14%' }}>
-                {[0, 1].map((col) => (
-                  <div
-                    key={col}
-                    style={{
-                      width: '26%',
-                      aspectRatio: '1 / 1.3',
-                      backgroundColor: isNight
-                        ? ((i + row + col) % 3 !== 0 ? palette.windowLit : palette.windowDark)
-                        : palette.windowLit,
-                      borderRadius: 1,
-                      transition: `background-color ${CROSSFADE_DURATION}s`,
-                    }}
-                  />
-                ))}
-              </div>
-            ))}
-
-            {/* Hanging sign */}
-            {b.hasSign && (
-              <div
-                style={{
-                  position: 'absolute',
-                  top: -3,
-                  left: '12%',
-                  right: '12%',
-                  height: 5,
-                  backgroundColor: isNight ? '#2a1a0a' : '#5a4020',
-                  borderRadius: 1,
-                  transition: `background-color ${CROSSFADE_DURATION}s`,
-                }}
-              />
-            )}
-
-            {/* Door at bottom center */}
-            <div
-              style={{
-                position: 'absolute',
-                bottom: 0,
-                left: '50%',
-                transform: 'translateX(-50%)',
-                width: '30%',
-                height: '18%',
-                backgroundColor: isNight ? '#1a1207' : '#2a1a0a',
-                borderRadius: '2px 2px 0 0',
-                transition: `background-color ${CROSSFADE_DURATION}s`,
+        {BUILDINGS.map((bldg) => {
+          const bHeight = sh * bldg.hPct
+          const isHovered = hoveredBuilding === bldg.id
+          return (
+            <motion.div
+              key={bldg.id}
+              onMouseEnter={() => setHoveredBuilding(bldg.id)}
+              onMouseLeave={() => setHoveredBuilding(null)}
+              animate={{
+                scale: isHovered ? 1.04 : 1,
+                filter: isHovered ? 'brightness(1.5)' : 'brightness(1)',
               }}
-            />
-          </motion.div>
-        ))}
-      </motion.div>
+              transition={{ duration: 0.3 }}
+              style={{
+                width: `${bldg.w}%`,
+                height: bHeight,
+                backgroundColor: palette.building,
+                borderRadius: '2px 2px 0 0',
+                borderTop: `1px solid ${palette.buildingBorderTop}`,
+                position: 'relative',
+                flexShrink: 0,
+                cursor: 'pointer',
+                transformOrigin: 'bottom center',
+                transition: `background-color ${CROSS}s`,
+              }}
+            >
+              {/* Peaked roof for saloon */}
+              {bldg.hasPeak && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: -10,
+                    left: '15%',
+                    right: '15%',
+                    height: 10,
+                    backgroundColor: palette.building,
+                    clipPath: 'polygon(0 100%, 50% 0, 100% 100%)',
+                    transition: `background-color ${CROSS}s`,
+                  }}
+                />
+              )}
 
-      {/* ════════════════════════════════════════════════════════════
-          BOTTOM ZONE — GROUND + UI
-          ════════════════════════════════════════════════════════════ */}
+              {/* Hanging sign */}
+              {bldg.hasSign && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: -4,
+                    left: '10%',
+                    right: '10%',
+                    height: 6,
+                    backgroundColor: isNight ? '#2a1a0a' : '#5a4020',
+                    borderRadius: 1,
+                    transition: `background-color ${CROSS}s`,
+                  }}
+                />
+              )}
 
-      {/* Ground gradient */}
+              {/* Windows */}
+              {Array.from({ length: bldg.windows }).map((_, row) => (
+                <div key={row} style={{ display: 'flex', justifyContent: 'space-evenly', paddingTop: '12%' }}>
+                  {[0, 1].map((col) => (
+                    <div
+                      key={col}
+                      style={{
+                        width: '22%',
+                        aspectRatio: '1 / 1.3',
+                        backgroundColor: palette.windowBg,
+                        boxShadow: palette.windowGlow,
+                        borderRadius: 1,
+                        transition: `background-color ${CROSS}s, box-shadow ${CROSS}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              ))}
+
+              {/* Door */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: '28%',
+                  height: '18%',
+                  backgroundColor: isNight ? '#1a1207' : '#2a1a0a',
+                  borderRadius: '2px 2px 0 0',
+                  transition: `background-color ${CROSS}s`,
+                }}
+              />
+            </motion.div>
+          )
+        })}
+      </div>
+
+      {/* ═══════ z:5 — GROUND (parallax layer 3) ═══════ */}
       <motion.div
-        animate={{
-          background: `linear-gradient(to bottom, ${palette.ground}, ${palette.groundEdge})`,
-        }}
-        transition={{ duration: CROSSFADE_DURATION }}
+        animate={{ background: isNight ? NIGHT_GROUND : DAY_GROUND }}
+        transition={{ duration: CROSS }}
         style={{
           position: 'absolute',
           bottom: 0,
-          left: 0,
-          right: 0,
-          height: '12%',
+          left: '-7.5%',
+          width: '115%',
+          height: sh * 0.10,
+          zIndex: 5,
+          transform: `translateX(${groundX}px)`,
+          transition: 'transform 0.3s ease-out',
         }}
       />
 
-      {/* Tumbleweed 1 */}
+      {/* ═══════ z:7 — TUMBLEWEEDS ═══════ */}
       <motion.div
-        animate={{
-          x: [sw * -0.08, sw * 1.08],
-          rotate: [0, 720],
-        }}
-        transition={{
-          duration: 16,
-          repeat: Infinity,
-          ease: 'linear' as const,
-          repeatDelay: 6,
-        }}
+        animate={{ x: [sw * -0.08, sw * 1.08], rotate: [0, 720] }}
+        transition={{ duration: 16, repeat: Infinity, ease: 'linear' as const, repeatDelay: 6 }}
         style={{
           position: 'absolute',
-          bottom: '11.5%',
+          bottom: sh * 0.105,
           width: 16,
           height: 16,
           borderRadius: '50%',
           border: `2px solid ${palette.tumbleweed}`,
           opacity: 0.4,
           pointerEvents: 'none',
+          zIndex: 7,
         }}
       />
-
-      {/* Tumbleweed 2 (smaller, offset timing) */}
       <motion.div
-        animate={{
-          x: [sw * 1.1, sw * -0.1],
-          rotate: [0, -540],
-        }}
-        transition={{
-          duration: 22,
-          repeat: Infinity,
-          ease: 'linear' as const,
-          repeatDelay: 10,
-          delay: 8,
-        }}
+        animate={{ x: [sw * 1.1, sw * -0.1], rotate: [0, -540] }}
+        transition={{ duration: 22, repeat: Infinity, ease: 'linear' as const, repeatDelay: 10, delay: 8 }}
         style={{
           position: 'absolute',
-          bottom: '11%',
+          bottom: sh * 0.10,
           width: 12,
           height: 12,
           borderRadius: '50%',
           border: `1.5px solid ${palette.tumbleweed}`,
           opacity: 0.3,
           pointerEvents: 'none',
+          zIndex: 7,
         }}
       />
 
-      {/* Ground tagline */}
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.9 }}
-        style={{
-          position: 'absolute',
-          bottom: '1.5%',
-          left: 0,
-          right: 0,
-          textAlign: 'center',
-          fontFamily: '"IBM Plex Mono", monospace',
-          fontSize: `clamp(6px, ${sw * 0.006}px, 8px)`,
-          color: palette.footerText,
-          letterSpacing: '0.25em',
-          textTransform: 'uppercase',
-          margin: 0,
-          zIndex: 10,
-          pointerEvents: 'none',
-        }}
-      >
-        est. 2024 &#10022; population: 1
-      </motion.p>
+      {/* ═══════ z:9 — UI LAYER (no parallax) ═══════ */}
 
-      {/* ── Day/Night toggle ─────────────────────────────────────── */}
+      {/* Day/Night toggle */}
       <motion.button
         onClick={() => setIsNight((v) => !v)}
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.9 }}
-        animate={{
-          backgroundColor: palette.toggleBg,
-          color: palette.toggleText,
-        }}
+        animate={{ backgroundColor: palette.toggleBg, color: palette.toggleText }}
         transition={{ duration: 0.2 }}
         style={{
           position: 'absolute',
           top: 10,
           right: 10,
-          zIndex: 20,
+          zIndex: 9,
           width: 30,
           height: 30,
           borderRadius: '50%',
@@ -552,6 +476,33 @@ export function WesternTown() {
       >
         {isNight ? '\u2600' : '\u263E'}
       </motion.button>
+
+      {/* Bottom CTA text */}
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.2 }}
+        style={{
+          position: 'absolute',
+          bottom: sh * 0.015,
+          left: 0,
+          right: 0,
+          textAlign: 'center',
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: Math.max(7, sw * 0.007),
+          color: palette.footerText,
+          letterSpacing: '0.25em',
+          textTransform: 'uppercase',
+          margin: 0,
+          zIndex: 9,
+          pointerEvents: 'none',
+        }}
+      >
+        click a building to enter
+      </motion.p>
+
+      {/* ═══════ z:10 — POKÉMON TEXT BOX ═══════ */}
+      <PokemonTextBox buildingId={hoveredBuilding} sw={sw} sh={sh} />
     </div>
   )
 }

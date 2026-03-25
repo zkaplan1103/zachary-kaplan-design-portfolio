@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 // import { createPortal } from 'react-dom' // SNAKE SYSTEM — COMMENTED OUT
-// import { motion } from 'framer-motion' // Not used after CRT power-off refactor
+import { useAnimate } from 'framer-motion'
 import { useUIStore } from '@/store/uiStore'
 import { useBezelContext } from '@/contexts/BezelContext'
 // import { BEZEL } from '@/config/bezel' // SNAKE SYSTEM — needed by computePathD (commented out)
@@ -253,11 +253,8 @@ export function IntroAnimation() {
   const [showBlink,    setShowBlink]    = useState(true)
   // const [introExiting, setIntroExiting] = useState(false) // Replaced by CRT power-off
 
-  // CRT power-off sequence phases
-  type CRTPhase = 'idle' | 'collapseY' | 'collapseX' | 'dot' | 'black'
-  const [crtPhase, setCrtPhase] = useState<CRTPhase>('idle')
-  const [crtScaleY, setCrtScaleY] = useState(1)
-  const [crtScaleX, setCrtScaleX] = useState(1)
+  // CRT power-off — Framer Motion imperative
+  const [crtScope, animateCrt] = useAnimate()
   const [showDot, setShowDot] = useState(false)
 
   useEffect(() => { themeRef.current = theme }, [theme])
@@ -949,7 +946,7 @@ export function IntroAnimation() {
       setTypedText(fullText.slice(0, i))
       if (i >= fullText.length) {
         clearInterval(tid)
-        setTimeout(() => { setCrtPhase('collapseY') }, 800)
+        setTimeout(() => { runCrtPowerOff() }, 800)
       }
     }, 78)
     return () => clearInterval(tid)
@@ -962,57 +959,29 @@ export function IntroAnimation() {
     return () => clearInterval(bid)
   }, [showTyping])
 
-  // ── CRT power-off sequence ────────────────────────────────────────────────
-  useEffect(() => {
-    if (crtPhase === 'idle') return
-
-    if (crtPhase === 'collapseY') {
-      // Phase 1: Vertical collapse over 500ms (ease-in)
-      const start = performance.now()
-      let raf = 0
-      function tick(now: number) {
-        const t = Math.min(1, (now - start) / 500)
-        const ease = t * t // easeIn — accelerates into collapse
-        setCrtScaleY(1 - ease * 0.985) // 1.0 → 0.015
-        if (t < 1) { raf = requestAnimationFrame(tick) }
-        else { setCrtPhase('collapseX') }
-      }
-      raf = requestAnimationFrame(tick)
-      return () => cancelAnimationFrame(raf)
-    }
-
-    if (crtPhase === 'collapseX') {
-      // Phase 2: Horizontal collapse over 150ms
-      const start = performance.now()
-      let raf = 0
-      function tick(now: number) {
-        const t = Math.min(1, (now - start) / 150)
-        setCrtScaleX(1 - t) // 1.0 → 0.0
-        if (t < 1) { raf = requestAnimationFrame(tick) }
-        else { setShowDot(true); setCrtPhase('dot') }
-      }
-      raf = requestAnimationFrame(tick)
-      return () => cancelAnimationFrame(raf)
-    }
-
-    if (crtPhase === 'dot') {
-      // Phase 3: White dot flash for 100ms
-      const timer = setTimeout(() => {
-        setShowDot(false)
-        setCrtPhase('black')
-      }, 100)
-      return () => clearTimeout(timer)
-    }
-
-    if (crtPhase === 'black') {
-      // Phase 4: Black screen for 250ms, then fire introComplete
-      const timer = setTimeout(() => {
-        setIntroComplete(true)
-        setIntroVisible(false)
-      }, 250)
-      return () => clearTimeout(timer)
-    }
-  }, [crtPhase, setIntroComplete, setIntroVisible])
+  // ── CRT power-off sequence (Framer Motion imperative) ──────────────────────
+  async function runCrtPowerOff() {
+    if (!crtScope.current) return
+    // Step 1: Vertical collapse 500ms — content squishes to thin line
+    await animateCrt(crtScope.current,
+      { scaleY: 0.015, filter: 'brightness(1.4)' },
+      { duration: 0.5, ease: 'easeIn' },
+    )
+    // Step 2: Horizontal collapse 180ms — line shrinks to dot
+    await animateCrt(crtScope.current,
+      { scaleX: 0 },
+      { duration: 0.18, ease: 'easeIn' },
+    )
+    // Step 3: White dot flash 80ms
+    setShowDot(true)
+    await new Promise((r) => setTimeout(r, 80))
+    setShowDot(false)
+    // Step 4: Black hold 300ms
+    await new Promise((r) => setTimeout(r, 300))
+    // Step 5: Complete — hand off to WesternTown
+    setIntroComplete(true)
+    setIntroVisible(false)
+  }
 
   // ─── Render ────────────────────────────────────────────────────────────────
 
@@ -1020,9 +989,6 @@ export function IntroAnimation() {
   const bgColor       = theme === 'dark' ? '#000000' : '#ffffff'
   const sw = b.width
   const sh = b.height
-
-  // CRT off active = any phase past idle
-  const crtOff = crtPhase !== 'idle'
 
   return (
     <>
@@ -1046,18 +1012,13 @@ export function IntroAnimation() {
           backgroundColor: bgColor,
         }}
       >
-        {/* CRT collapse wrapper */}
+        {/* CRT collapse wrapper — animated by useAnimate */}
         <div
+          ref={crtScope}
           style={{
             width: '100%',
             height: '100%',
-            transform: crtOff
-              ? `scaleY(${crtScaleY}) scaleX(${crtScaleX})`
-              : undefined,
             transformOrigin: '50% 50%',
-            filter: crtOff && crtPhase === 'collapseY'
-              ? `brightness(${1 + crtScaleY < 0.5 ? (1 - crtScaleY) * 0.4 : 0})`
-              : undefined,
             position: 'relative',
             overflow: 'hidden',
             cursor: 'crosshair',
