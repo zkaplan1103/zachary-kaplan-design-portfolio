@@ -12,16 +12,31 @@ export function HomePage() {
       {/* Phase 1: ZK screensaver — click to exit */}
       {!introComplete && <IntroAnimation />}
 
-      {/* Phase 2: Fade-in → Western Town */}
+      {/* Phase 2: CRT warm-up — scale into view + black veil fades independently */}
       {introComplete && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.15, ease: 'easeOut' }}
-          style={{ width: '100%', height: '100%' }}
-        >
-          <WesternTown />
-        </motion.div>
+        <>
+          {/* Town: scale 1.015→1 and opacity 0→1 over 800ms */}
+          <motion.div
+            initial={{ opacity: 0, scale: 1.015 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.8, delay: 0.1, ease: 'easeOut' }}
+            style={{ position: 'absolute', inset: 0 }}
+          >
+            <WesternTown />
+          </motion.div>
+          {/* Black veil fades out independently — CRT phosphor warming up from dark */}
+          <motion.div
+            initial={{ opacity: 1 }}
+            animate={{ opacity: 0 }}
+            transition={{ duration: 0.7, delay: 0.1, ease: 'easeOut' }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              backgroundColor: '#000',
+              pointerEvents: 'none',
+            }}
+          />
+        </>
       )}
     </PageWrapper>
   )

@@ -977,7 +977,7 @@ export function IntroAnimation() {
     await new Promise((r) => setTimeout(r, 80))
     setShowDot(false)
     // Step 4: Black hold 300ms
-    await new Promise((r) => setTimeout(r, 300))
+    await new Promise((r) => setTimeout(r, 150))
     // Step 5: Complete — hand off to WesternTown
     setIntroComplete(true)
     setIntroVisible(false)
