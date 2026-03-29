@@ -253,9 +253,12 @@ export function IntroAnimation() {
   const [showBlink,    setShowBlink]    = useState(true)
   // const [introExiting, setIntroExiting] = useState(false) // Replaced by CRT power-off
 
-  // CRT power-off — Framer Motion imperative
-  const [crtScope, animateCrt] = useAnimate()
-  const [showDot, setShowDot] = useState(false)
+  // CRT power-off overlay — three independent scopes, one per transform axis
+  const [overlayScope, animateOverlay] = useAnimate<HTMLDivElement>()
+  const [lineScope,    animateLine]    = useAnimate<HTMLDivElement>()
+  const [diamondScope, animateDiamond] = useAnimate<HTMLDivElement>()
+  const [showCrtOverlay, setShowCrtOverlay] = useState(false)
+  const [showDiamond,    setShowDiamond]    = useState(false)
 
   useEffect(() => { themeRef.current = theme }, [theme])
 
@@ -959,26 +962,42 @@ export function IntroAnimation() {
     return () => clearInterval(bid)
   }, [showTyping])
 
-  // ── CRT power-off sequence (Framer Motion imperative) ──────────────────────
+  // ── CRT power-off sequence ─────────────────────────────────────────────────
+  // Three separate elements / transform axes — no filter, no multi-transform conflicts.
+  // Overlay sits above all intro content at z:200.
   async function runCrtPowerOff() {
-    if (!crtScope.current) return
-    // Step 1: Vertical collapse 500ms — content squishes to thin line
-    await animateCrt(crtScope.current,
-      { scaleY: 0.015, filter: 'brightness(1.4)' },
-      { duration: 0.5, ease: 'easeIn' },
+    // Step 1: Hard cut to white — show overlay instantly
+    setShowCrtOverlay(true)
+    // Double RAF — ensures React commits the render and all scope refs are attached
+    await new Promise<void>((res) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => res()))
     )
-    // Step 2: Horizontal collapse 180ms — line shrinks to dot
-    await animateCrt(crtScope.current,
-      { scaleX: 0 },
-      { duration: 0.18, ease: 'easeIn' },
-    )
-    // Step 3: White dot flash 80ms
-    setShowDot(true)
+    if (!overlayScope.current) return
+
+    // Step 2: Hold white 80ms — user registers the flash
     await new Promise((r) => setTimeout(r, 80))
-    setShowDot(false)
-    // Step 4: Black hold 300ms
+
+    // Step 3: scaleY collapse — full white screen → thin horizontal line (450ms)
+    await animateOverlay(
+      overlayScope.current,
+      { scaleY: 0.008 },
+      { duration: 0.45, ease: [0.4, 0, 1, 1] },
+    )
+
+    // Step 4: Diamond appears, line collapses horizontally + diamond collapses (simultaneous)
+    setShowDiamond(true)
+    await new Promise<void>((res) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => res()))
+    )
+    await Promise.all([
+      animateLine(lineScope.current!, { scaleX: 0 }, { duration: 0.3, ease: 'easeIn' }),
+      animateDiamond(diamondScope.current!, { scale: 0 }, { duration: 0.25, ease: 'easeIn' }),
+    ])
+
+    // Step 5: Black hold 150ms — everything collapsed, dark canvas shows through
     await new Promise((r) => setTimeout(r, 150))
-    // Step 5: Complete — hand off to WesternTown
+
+    // Step 6: Hand off
     setIntroComplete(true)
     setIntroVisible(false)
   }
@@ -1005,76 +1024,98 @@ export function IntroAnimation() {
 
       <div
         style={{
-          width:  sw > 0 ? `${Math.round(sw)}px` : '100%',
-          height: sh > 0 ? `${Math.round(sh)}px` : '100vh',
+          width:    sw > 0 ? `${Math.round(sw)}px` : '100%',
+          height:   sh > 0 ? `${Math.round(sh)}px` : '100vh',
           position: 'relative',
           overflow: 'hidden',
           backgroundColor: bgColor,
+          cursor: 'crosshair',
         }}
       >
-        {/* CRT collapse wrapper — animated by useAnimate */}
-        <div
-          ref={crtScope}
-          style={{
-            width: '100%',
-            height: '100%',
-            transformOrigin: '50% 50%',
-            position: 'relative',
-            overflow: 'hidden',
-            cursor: 'crosshair',
-          }}
-        >
-          <canvas ref={canvasRef} className="absolute inset-0" />
+        <canvas ref={canvasRef} className="absolute inset-0" />
 
-          {showTyping && (
+        {showTyping && (
+          <div
+            className="absolute inset-x-0 flex justify-center pointer-events-none"
+            style={{ top: '38%' }}
+          >
             <div
-              className="absolute inset-x-0 flex justify-center pointer-events-none"
-              style={{ top: '38%' }}
+              style={{
+                fontFamily: '"IBM Plex Mono", monospace',
+                fontSize: '15px',
+                color: particleColor,
+                letterSpacing: '0.06em',
+                display: 'flex',
+                alignItems: 'center',
+              }}
             >
-              <div
+              <span>{typedText}</span>
+              <span
                 style={{
-                  fontFamily: '"IBM Plex Mono", monospace',
-                  fontSize: '15px',
-                  color: particleColor,
-                  letterSpacing: '0.06em',
-                  display: 'flex',
-                  alignItems: 'center',
+                  display: 'inline-block',
+                  width: '9px',
+                  height: '17px',
+                  backgroundColor: particleColor,
+                  opacity: showBlink ? 1 : 0,
+                  marginLeft: '2px',
+                  verticalAlign: 'middle',
+                  flexShrink: 0,
                 }}
-              >
-                <span>{typedText}</span>
-                <span
-                  style={{
-                    display: 'inline-block',
-                    width: '9px',
-                    height: '17px',
-                    backgroundColor: particleColor,
-                    opacity: showBlink ? 1 : 0,
-                    marginLeft: '2px',
-                    verticalAlign: 'middle',
-                    flexShrink: 0,
-                  }}
-                />
-              </div>
+              />
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* White dot flash */}
-        {showDot && (
+        {/* CRT power-off overlay — z:200, mounts on trigger, three-layer sequence */}
+        {showCrtOverlay && (
           <div
             style={{
               position: 'absolute',
-              top: '50%',
-              left: '50%',
-              width: 20,
-              height: 20,
-              borderRadius: '50%',
-              backgroundColor: '#ffffff',
-              transform: 'translate(-50%, -50%)',
-              boxShadow: '0 0 30px 10px rgba(255,255,255,0.8)',
-              zIndex: 10,
+              inset: 0,
+              zIndex: 200,
+              pointerEvents: 'none',
             }}
-          />
+          >
+            {/* Layer 1 (overlayScope): transparent container — handles scaleY collapse */}
+            <div
+              ref={overlayScope}
+              style={{
+                position: 'absolute',
+                inset: 0,
+                transformOrigin: '50% 50%',
+              }}
+            >
+              {/* Layer 2 (lineScope): white fill inside scaleY container — handles scaleX collapse */}
+              <div
+                ref={lineScope}
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: '#ffffff',
+                  transformOrigin: '50% 50%',
+                }}
+              />
+            </div>
+
+            {/* Layer 3 (diamondScope): white TV-phosphor diamond, centered sibling, collapses via scale */}
+            {/* Positioned via calc (not transform:translate) to avoid FM transform conflict */}
+            {showDiamond && (
+              <div
+                ref={diamondScope}
+                style={{
+                  position: 'absolute',
+                  left: 'calc(50% - 14px)',
+                  top: 'calc(50% - 14px)',
+                  width: 28,
+                  height: 28,
+                  backgroundColor: '#ffffff',
+                  clipPath: "path('M 14 0 C 7 7, 0 7, 0 14 C 0 21, 7 21, 14 28 C 21 21, 28 21, 28 14 C 28 7, 21 7, 14 0')",
+                  transformOrigin: '50% 50%',
+                  zIndex: 201,
+                }}
+              />
+            )}
+          </div>
         )}
       </div>
     </>
