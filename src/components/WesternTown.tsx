@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, useAnimate } from 'framer-motion'
+import { useNavigate } from 'react-router-dom'
 import { useBezelContext } from '@/contexts/BezelContext'
 import { PokemonTextBox } from '@/components/PokemonTextBox'
 import { AmbientEntity, CHARACTER_MANIFEST } from '@/components/ambient/AmbientEntity'
@@ -88,11 +89,55 @@ const CROSS = 1.5 // 1.5s day/night transition
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-export function WesternTown() {
+// ─── Cinematic timings ──────────────────────────────────────────────────────
+// GLOBAL_TRANSITION_SPEED = 800ms (zoom 800ms, fade starts at 450ms absolute)
+// World-camera: transform-origin = door focal point, scale only (no translate).
+// GPU path: scale via transform, never width/height/top/left.
+const ZOOM_DURATION   = 0.8   // seconds: world scales to fill half screen height
+const FADE_DELAY_MS   = 450   // ms: absolute delay before fade (sweet spot mid-zoom)
+const FADE_DURATION   = 0.2   // seconds: fade to black overlay
+const RETURN_DURATION = 0.7   // seconds: pull-back on return
+const CAMERA_SCALE_MIN = 1.8
+const CAMERA_SCALE_MAX = 3.0
+
+export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) {
+  const navigate = useNavigate()
   const [isNight, setIsNight] = useState(true)
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null)
+  const [clickedBuilding, setClickedBuilding] = useState<string | null>(null)
+  const [fadeScope,  animateFade]  = useAnimate()
+  const [worldScope, animateWorld] = useAnimate()
   const containerRef = useRef<HTMLDivElement>(null)
   const [mouseNorm, setMouseNorm] = useState(0) // -1 to 1
+
+  // ── Pull-back on return from interior ────────────────────────────────────
+  const didReturn = useRef(false)
+  useEffect(() => {
+    if (!entryBuilding || didReturn.current || !worldScope.current) return
+    didReturn.current = true
+    const info = buildingInfo[entryBuilding]
+    if (!info) return
+
+    const S = Math.min(CAMERA_SCALE_MAX, Math.max(CAMERA_SCALE_MIN, 0.50 / info.hPct))
+    // On return, mouseNorm = 0, buildingsX = 0, so doorX = info.cx
+    const doorX = info.cx
+    const doorY = sh * 0.90
+
+    worldScope.current.style.transformOrigin = `${doorX}px ${doorY}px`
+    animateWorld(worldScope.current, { scale: S }, { duration: 0 })
+
+    setTimeout(() => {
+      animateWorld(
+        worldScope.current,
+        { scale: 1 },
+        { duration: RETURN_DURATION, ease: [0.2, 0, 0.4, 1] }
+      ).then(() => {
+        // Reset origin to default after pull-back so hover/idle state is clean
+        if (worldScope.current) worldScope.current.style.transformOrigin = '50% 50%'
+      })
+    }, 100)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // ── Ambient character spawner ────────────────────────────────────────────
   type ActiveChar = { instanceId: string; def: CharacterDef; direction: 'ltr' | 'rtl' }
@@ -141,6 +186,49 @@ export function WesternTown() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNight])
 
+  // ── World-camera zoom → fade → navigate ─────────────────────────────────
+  // Uses transform-origin = door focal point + scale only (no translate).
+  // GPU path: only `transform` is animated — no width/height/top/left.
+  const handleBuildingClick = useCallback(async (
+    buildingId: string,
+    doorX: number,    // parallax-adjusted building center X = door horizontal pos
+    bldgHPct: number, // building height fraction, for scale calc
+    screenH: number,
+  ) => {
+    if (clickedBuilding) return
+    setClickedBuilding(buildingId)
+    setHoveredBuilding(null)
+
+    const S = Math.min(CAMERA_SCALE_MAX, Math.max(CAMERA_SCALE_MIN, 0.50 / bldgHPct))
+
+    // Door Y = ground plane from top of screen.
+    // Building bases sit at sh*0.90 (ground layer is bottom 10% of screen).
+    const doorY = screenH * 0.90
+
+    // Set transform-origin as a synchronous DOM write before animating.
+    // Safe with useAnimate: FM does not write transformOrigin unless explicitly animated.
+    if (worldScope.current) {
+      worldScope.current.style.transformOrigin = `${doorX}px ${doorY}px`
+    }
+
+    // Scale only — the door point stays fixed, world grows outward toward viewer.
+    animateWorld(
+      worldScope.current,
+      { scale: S },
+      { duration: ZOOM_DURATION, ease: [0.4, 0, 0.6, 1] }
+    )
+
+    // Fade starts at 450ms absolute — building is well inside frame, feels cinematic
+    await new Promise((r) => setTimeout(r, FADE_DELAY_MS))
+    await animateFade(
+      fadeScope.current,
+      { opacity: 1 },
+      { duration: FADE_DURATION, ease: 'easeIn' }
+    )
+
+    navigate(`/building/${buildingId}`, { state: { fromBuilding: buildingId } })
+  }, [clickedBuilding, animateWorld, worldScope, animateFade, fadeScope, navigate])
+
   const b = useBezelContext()
   const palette = isNight ? NIGHT : DAY
   const sw = b.width
@@ -172,16 +260,16 @@ export function WesternTown() {
   const GAP_PX = sw * 0.006
 
   const buildingInfo = (() => {
-    const map: Record<string, { cx: number; bw: number }> = {}
+    const map: Record<string, { cx: number; bw: number; hPct: number }> = {}
 
-    // District A: container left = sw*0.02, container width in % of sw:
+    // District A: container left = sw*0.02
     const aContainerPct = DISTRICT_A.reduce((s, b) => s + b.w, 0) + (DISTRICT_A.length - 1) * 0.8
     const aContainerW   = sw * aContainerPct / 100
     const aContainerL   = sw * 0.02
     let cursor = aContainerL
     for (const b of DISTRICT_A) {
       const bw = (b.w / 100) * aContainerW
-      map[b.id] = { cx: cursor + bw / 2, bw }
+      map[b.id] = { cx: cursor + bw / 2, bw, hPct: b.hPct }
       cursor += bw + GAP_PX
     }
 
@@ -192,19 +280,47 @@ export function WesternTown() {
     cursor = bContainerL
     for (const b of DISTRICT_B) {
       const bw = (b.w / 100) * bContainerW
-      map[b.id] = { cx: cursor + bw / 2, bw }
+      map[b.id] = { cx: cursor + bw / 2, bw, hPct: b.hPct }
       cursor += bw + GAP_PX
     }
 
     return map
   })()
 
+  // Lock parallax during zoom so buildings don't drift while animating
+  const isZooming = clickedBuilding !== null
+
+  // (No per-building zoom state needed — camera zoom is applied to the world container)
+
   return (
     <div
       ref={containerRef}
-      onMouseMove={onMouseMove}
-      style={{ position: 'absolute', inset: 0, overflow: 'hidden', cursor: 'default' }}
+      onMouseMove={isZooming ? undefined : onMouseMove}
+      style={{
+        position: 'absolute',
+        inset: 0,
+        overflow: 'hidden',
+        cursor: isZooming ? 'default' : 'default',
+        willChange: isZooming ? 'transform' : 'auto',
+      }}
     >
+      {/* ══════════════════════════════════════════════════════════════════════
+          WORLD CONTAINER — everything that zooms with the camera.
+          transform-origin: 0 0 makes translate math simple:
+            translateX = sw/2 - buildingCenterX * scale
+            translateY = sh/2 - buildingCenterY * scale
+          UI elements (toggle, textbox, fade overlay) sit OUTSIDE this wrapper.
+      ══════════════════════════════════════════════════════════════════════ */}
+      <motion.div
+        ref={worldScope}
+        style={{
+          position:   'absolute',
+          inset:      0,
+          willChange: isZooming ? 'transform' : 'auto',
+          // transformOrigin is set imperatively in handleBuildingClick per door position
+        }}
+      >
+
       {/* ═══════ z:10 — SKY GRADIENT (parallax layer 1) ═══════ */}
       <motion.div
         animate={{ background: isNight ? NIGHT_SKY : DAY_SKY }}
@@ -395,22 +511,22 @@ export function WesternTown() {
       {/* overflow:hidden on each district container clips buildings at the horizon line,    */}
       {/* preventing the "mirror leak" where building bases bleed into the ground layer.     */}
       {[
-        { district: DISTRICT_A, side: 'left'  as const, anchor: { left: '2%'  } },
-        { district: DISTRICT_B, side: 'right' as const, anchor: { right: '2%' } },
+        { district: DISTRICT_A, anchor: { left: '2%'  } },
+        { district: DISTRICT_B, anchor: { right: '2%' } },
       ].map(({ district, anchor }) => (
         <div
           key={JSON.stringify(anchor)}
           style={{
             position:   'absolute',
-            bottom:     sh * 0.10,   // sits exactly on top of ground layer
-            height:     sh * 0.28,   // tall enough for tallest building
+            bottom:     sh * 0.10,
+            height:     sh * 0.28,
             width:      `${district.reduce((acc, b) => acc + b.w, 0) + (district.length - 1) * 0.8}%`,
             ...anchor,
             display:    'flex',
             alignItems: 'flex-end',
             gap:        `${sw * 0.006}px`,
             zIndex:     30,
-            overflow:   'hidden',    // ← clips bottom bleed at horizon line
+            overflow:   'hidden',   // clips base at horizon — world container handles zoom clip
             transform:  `translateX(${buildingsX}px)`,
             transition: 'transform 0.3s ease-out',
           }}
@@ -418,13 +534,22 @@ export function WesternTown() {
           {district.map((bldg) => {
             const bHeight   = sh * bldg.hPct
             const isHovered = hoveredBuilding === bldg.id
+            const info      = buildingInfo[bldg.id]
             return (
               <motion.div
                 key={bldg.id}
-                onMouseEnter={() => setHoveredBuilding(bldg.id)}
+                onMouseEnter={() => !isZooming && setHoveredBuilding(bldg.id)}
                 onMouseLeave={() => setHoveredBuilding(null)}
+                onClick={() => {
+                  if (isZooming || !info) return
+                  handleBuildingClick(
+                    bldg.id,
+                    info.cx + buildingsX,  // parallax-adjusted door X
+                    bldg.hPct,
+                    sh,
+                  )
+                }}
                 animate={{
-                  scale:  isHovered ? 1.04 : 1,
                   filter: isHovered ? 'brightness(1.5)' : 'brightness(1)',
                 }}
                 transition={{ duration: 0.3 }}
@@ -436,8 +561,8 @@ export function WesternTown() {
                   borderTop:       `1px solid ${palette.buildingBorderTop}`,
                   position:        'relative',
                   flexShrink:      0,
-                  cursor:          'pointer',
-                  transformOrigin: 'bottom center',
+                  zIndex:          30,
+                  cursor:          isZooming ? 'default' : 'pointer',
                   transition:      `background-color ${CROSS}s`,
                 }}
               >
@@ -560,6 +685,9 @@ export function WesternTown() {
         }}
       />
 
+      </motion.div>
+      {/* END WORLD CONTAINER — UI elements below do not zoom ════════════════ */}
+
       {/* ═══════ z:42 — UI LAYER (no parallax) ═══════ */}
 
       {/* Day/Night toggle */}
@@ -652,32 +780,49 @@ export function WesternTown() {
         </svg>
       </div>
 
-      {/* ═══════ z:45 — POKÉMON TEXT BOX ═══════ */}
-      <PokemonTextBox
-        buildingId={hoveredBuilding}
-        sw={sw}
-        sh={sh}
-        isNight={isNight}
-        anchorX={(() => {
-          if (!hoveredBuilding) return 0
-          const info = buildingInfo[hoveredBuilding]
-          if (!info) return sw * 0.5
-          // ── Parallax-aware anchor ─────────────────────────────────────────
-          // cx is at rest (mouseNorm=0). Add buildingsX so box tracks the
-          // building's actual rendered position after parallax shift.
-          // GLOBAL_OFFSET = half saloon bw = constant px gap from any building
-          // center to the box left edge, identical for every building.
-          const aContainerPct = DISTRICT_A.reduce((s, b) => s + b.w, 0) + (DISTRICT_A.length - 1) * 0.8
-          const aContainerW   = sw * aContainerPct / 100
-          const saloonBw      = (DISTRICT_A[0].w / 100) * aContainerW
-          const GLOBAL_OFFSET = saloonBw / 2
+      {/* ═══════ z:45 — POKÉMON TEXT BOX (hidden during zoom) ═══════ */}
+      {!isZooming && (
+        <PokemonTextBox
+          buildingId={hoveredBuilding}
+          sw={sw}
+          sh={sh}
+          isNight={isNight}
+          anchorX={(() => {
+            if (!hoveredBuilding) return 0
+            const info = buildingInfo[hoveredBuilding]
+            if (!info) return sw * 0.5
+            // ── Parallax-aware anchor ─────────────────────────────────────────
+            // cx is at rest (mouseNorm=0). Add buildingsX so box tracks the
+            // building's actual rendered position after parallax shift.
+            // GLOBAL_OFFSET = half saloon bw = constant px gap from any building
+            // center to the box left edge, identical for every building.
+            const aContainerPct = DISTRICT_A.reduce((s, b) => s + b.w, 0) + (DISTRICT_A.length - 1) * 0.8
+            const aContainerW   = sw * aContainerPct / 100
+            const saloonBw      = (DISTRICT_A[0].w / 100) * aContainerW
+            const GLOBAL_OFFSET = saloonBw / 2
 
-          const target = info.cx + buildingsX + GLOBAL_OFFSET
+            const target = info.cx + buildingsX + GLOBAL_OFFSET
 
-          // No right-wall clamp — overflow:hidden on the screen wrapper clips
-          // naturally, same as parallax buildings/sky. Left-wall only.
-          return Math.max(12, target)
-        })()}
+            // No right-wall clamp — overflow:hidden on the screen wrapper clips
+            // naturally, same as parallax buildings/sky. Left-wall only.
+            return Math.max(12, target)
+          })()}
+        />
+      )}
+
+      {/* ═══════ z:200 — CINEMATIC FADE OVERLAY ═══════ */}
+      {/* Always mounted; opacity:0 at rest. Animates to 1 on building click   */}
+      {/* before navigate(). pointerEvents block input during zoom+fade.        */}
+      <motion.div
+        ref={fadeScope}
+        style={{
+          position:        'absolute',
+          inset:           0,
+          zIndex:          200,
+          backgroundColor: '#000000',
+          opacity:         0,
+          pointerEvents:   isZooming ? 'all' : 'none',
+        }}
       />
     </div>
   )

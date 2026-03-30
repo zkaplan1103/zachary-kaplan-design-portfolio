@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { PageWrapper } from '@/components/layout/PageWrapper'
 import { IntroAnimation } from '@/components/IntroAnimation'
 import { WesternTown } from '@/components/WesternTown'
@@ -9,6 +10,11 @@ export function HomePage() {
   const introComplete = useUIStore((s) => s.introComplete)
   // Unmount blur/tint overlay layers after they finish animating
   const [showOverlay, setShowOverlay] = useState(true)
+
+  // Detect return navigation from BuildingInteriorPage
+  const location = useLocation()
+  const returnState = location.state as { fromBuilding?: string } | null
+  const fromBuilding = returnState?.fromBuilding
 
   return (
     <PageWrapper>
@@ -25,8 +31,26 @@ export function HomePage() {
             transition={{ duration: 1.2, ease: [0.2, 0, 0.6, 1] }}
             style={{ position: 'absolute', inset: 0 }}
           >
-            <WesternTown />
+            <WesternTown entryBuilding={fromBuilding} />
           </motion.div>
+
+          {/* Return fade: when navigating back from a building interior,
+              start fully black and dissolve to reveal the town */}
+          {fromBuilding && (
+            <motion.div
+              key={`return-fade-${fromBuilding}`}
+              initial={{ opacity: 1 }}
+              animate={{ opacity: 0 }}
+              transition={{ duration: 0.5, ease: 'easeOut' }}
+              style={{
+                position:        'absolute',
+                inset:           0,
+                zIndex:          55,
+                backgroundColor: '#000000',
+                pointerEvents:   'none',
+              }}
+            />
+          )}
 
           {/* Layers 2+3: separate div above WesternTown — blur + tint dissolve.
               backdrop-filter is on THIS element (not WesternTown) to avoid GPU compositor issue.

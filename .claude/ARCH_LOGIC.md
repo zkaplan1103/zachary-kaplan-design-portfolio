@@ -42,14 +42,17 @@ right-wall clamp — it breaks the "push past bezel" behavior for buildings 4 an
 | Celestial body | 12 |
 | Ground | 15 |
 | Ambient characters | 20 |
-| Buildings | 30 |
+| Buildings (default) | 30 |
 | Tumbleweeds | 32 |
 | Title card | 35 |
 | UI (toggle, CTA) | 42 |
-| PokemonTextBox | 45 |
+| PokemonTextBox | 60 |
 | Foreground easter eggs | 51 |
+| Zooming building (+ its district container) | 100 |
+| Cinematic fade overlay | 200 |
 
 Never insert a new layer without updating this table.
+**Rule**: Never animate `zIndex` via Framer Motion `animate` prop — it tweens fractionally and makes elements vanish. Always set via `style` for instant snap.
 
 ### 1.3 Parallax Rate Assignments
 | Element | translateX formula | Rate |
@@ -154,3 +157,46 @@ The CRTScreen wrapper has `overflow: hidden`. World-layer elements (buildings, s
 this. UI elements for buildings 4/5 should do the same: let the box push rightward with the building
 and get naturally clipped, rather than being force-clamped to `sw - boxWidth - N` which creates
 a visual disconnect between the building position and the box position.
+
+---
+
+## Part 5 — Cinematic Transition System
+
+### GLOBAL_TRANSITION_SPEED = 1200ms total
+| Phase | Duration | Notes |
+|---|---|---|
+| Building zoom to 50% screen height | 500ms | ease [0.4,0,0.6,1], per-building scale |
+| Fade trigger | at 300ms (60% into zoom) | building still inside frame |
+| Fade to black | 200ms | easeIn, overlaps final 40% of zoom |
+| Route swap (invisible — screen black) | ~0ms | React Router client nav |
+| Interior reveal (fade from black) | 400ms | easeOut |
+| Content entrance delay | 150ms after reveal | opacity+y on text/buttons |
+| Total | ~1200ms | |
+
+### Per-Building Zoom Scale Formula
+```
+scale = clamp(0.50 / bldg.hPct, 1.5, 3.5)
+```
+Targets exactly 50% screen height at peak. Clamped so short buildings don't fly off screen
+and tall buildings still produce a visible approach. Never use a hardcoded global scale.
+
+### Zoom Architecture: World-Camera (NOT per-building scale)
+The cinematic zoom scales the **world container** (`ref={worldScope}`), not individual buildings.
+- `transformOrigin: '0 0'` on the world container — makes translate math trivial
+- Per-click math: `S = clamp(0.50/hPct, 1.8, 3.0)`, `tx = sw/2 - cx*S`, `ty = sh/2 - cy*S`
+- `cy = sh*0.90 - bHeight/2` (building vertical center from screen top)
+- UI elements (toggle, textbox, fade overlay) live **outside** the world container — they never zoom
+- Buildings keep static `zIndex: 30`, `overflow: hidden` on district containers — no elevation hacks needed
+- Never scale individual buildings for the zoom — the whole world moves together
+
+### Z-Index Escape for Clicked Building
+District containers must NOT carry the z:30 value as a stacking context when a building zooms.
+Instead: remove `zIndex` from the flex container and set `zIndex: isClicked ? 60 : 30` per building.
+Also switch district container `overflow: hidden → visible` during `isZooming` to prevent clip.
+The root `<div overflow:hidden>` at the CRTScreen level handles the final viewport clip.
+
+### Mid-Way Fade Rationale
+Fading at ~1.8× (half-screen fill) rather than 3.0+ feels more cinematic:
+- User sees the building grow and "approach" before black — intention is communicated
+- Route swap behind the black curtain is imperceptible
+- Interior reveal from pure black feels like a hard-cut, not a glitch

@@ -197,7 +197,7 @@ export function PokemonTextBox({ buildingId, sw, sh, isNight, anchorX }: Pokemon
             backgroundColor: bg,
             // No CSS border — the SVG overlay draws the notched frame
             padding:         '8px 16px',
-            zIndex:          45,
+            zIndex:          60,
             pointerEvents:   'none',
             overflow:        'visible',
           }}
