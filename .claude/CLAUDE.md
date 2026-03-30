@@ -18,6 +18,9 @@ Senior full-stack engineer + UI/UX collaborator on a React 19 + Tailwind v4 desi
 | `[POSITIONING]` | z-index, position fixed/absolute/relative inside CRTScreen, layout overlap bugs |
 | `[LENIS_SCROLL]` | Scroll events, scroll-driven animation, whileInView, scroll velocity |
 | `[DESIGN_SYSTEM]` | Colors, fonts, spacing, new sections, Tailwind tokens, day/night palettes |
+| `[TOWN_DIALOGUE]` | PokemonTextBox, dialogue frame border, corner orb shading, day/night inversion |
+| `[TOWN_LOGIC]` | WesternTown z-index sandwich, ambient character spawner, AmbientEntity engine, CHARACTER_MANIFEST |
+| `[ARCHITECTURE]` | One-shot logic patterns, bezel boundary rule, unified spacing constants, pre-scan checklist → load `.claude/ARCH_LOGIC.md` |
 | `[MCP_ROUTING]` | Unsure which tool to use, or starting a new UI component or multi-file feature |
 
 **Protocol:** Before writing any code, state which tags apply. Then load only those memory files. Do not load both files for every task.
@@ -33,6 +36,11 @@ Senior full-stack engineer + UI/UX collaborator on a React 19 + Tailwind v4 desi
 | Task touches >2 files or has unclear scope | `sequential-thinking` first |
 | Scroll animation, hover effect, entrance pattern | `reactbits` |
 | Any color, font, or spacing decision | `ui-ux-pro-max --design-system` |
+
+---
+
+## Bezel Boundary Rule
+The internal screen of the BezelContainer is a hard boundary. Any UI element (text boxes, NPCs, overlays) must maintain a **12px safety buffer** from all inner bezel edges. Never allow a UI element to render under the bezel unless it is a world-layer object (buildings, sky, ground). World-layer objects (z ≤ 35) may overflow — they are clipped by `overflow:hidden` on the screen wrapper. UI elements (z ≥ 42) must be explicitly clamped in code.
 
 ---
 

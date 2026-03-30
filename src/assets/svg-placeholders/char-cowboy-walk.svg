@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 36" fill="none">
+  <!-- Hat brim -->
+  <line x1="2" y1="6" x2="18" y2="6" stroke="#e0c080" stroke-width="1.5"/>
+  <!-- Hat crown -->
+  <rect x="5" y="1" width="10" height="5" rx="1" stroke="#e0c080" stroke-width="1.5"/>
+  <!-- Head -->
+  <circle cx="10" cy="11" r="4" stroke="#e0c080" stroke-width="1.5"/>
+  <!-- Body -->
+  <line x1="10" y1="15" x2="10" y2="26" stroke="#e0c080" stroke-width="2"/>
+  <!-- Arms -->
+  <line x1="10" y1="18" x2="3" y2="22" stroke="#e0c080" stroke-width="1.5"/>
+  <line x1="10" y1="18" x2="17" y2="21" stroke="#e0c080" stroke-width="1.5"/>
+  <!-- Legs — walking pose -->
+  <line x1="10" y1="26" x2="5" y2="35" stroke="#e0c080" stroke-width="1.5"/>
+  <line x1="10" y1="26" x2="14" y2="33" stroke="#e0c080" stroke-width="1.5"/>
+</svg>

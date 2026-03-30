@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 110" fill="none">
+  <!-- Peaked roof (front facade gable) -->
+  <polygon points="15,40 45,10 75,40" stroke="#c9a96e" stroke-width="1.5" fill="#1a0d04"/>
+  <!-- Main body -->
+  <rect x="10" y="40" width="70" height="70" stroke="#c9a96e" stroke-width="1.5" fill="#1a0d04"/>
+  <!-- Hanging sign bar -->
+  <rect x="18" y="36" width="54" height="6" rx="1" fill="#2a1a0a"/>
+  <!-- Window row 1 -->
+  <rect x="18" y="52" width="22" height="17" rx="1" fill="#ff8c00" stroke="#c9a96e" stroke-width="1"/>
+  <rect x="50" y="52" width="22" height="17" rx="1" fill="#ff8c00" stroke="#c9a96e" stroke-width="1"/>
+  <!-- Window row 2 -->
+  <rect x="18" y="76" width="22" height="17" rx="1" fill="#ff8c00" stroke="#c9a96e" stroke-width="1"/>
+  <rect x="50" y="76" width="22" height="17" rx="1" fill="#ff8c00" stroke="#c9a96e" stroke-width="1"/>
+  <!-- Door -->
+  <rect x="33" y="92" width="24" height="18" rx="2" fill="#1a1207" stroke="#c9a96e" stroke-width="1"/>
+</svg>

@@ -259,6 +259,7 @@ export function IntroAnimation() {
   const [diamondScope, animateDiamond] = useAnimate<HTMLDivElement>()
   const [showCrtOverlay, setShowCrtOverlay] = useState(false)
   const [showDiamond,    setShowDiamond]    = useState(false)
+  const [crtFiring,      setCrtFiring]      = useState(false)
 
   useEffect(() => { themeRef.current = theme }, [theme])
 
@@ -966,7 +967,9 @@ export function IntroAnimation() {
   // Three separate elements / transform axes — no filter, no multi-transform conflicts.
   // Overlay sits above all intro content at z:200.
   async function runCrtPowerOff() {
-    // Step 1: Hard cut to white — show overlay instantly
+    // Step 0: Hide all content instantly — blank screen before white flash (batched with overlay mount)
+    setCrtFiring(true)
+    // Step 1: Mount overlay — motion.div fades opacity 0→1 over 60ms
     setShowCrtOverlay(true)
     // Double RAF — ensures React commits the render and all scope refs are attached
     await new Promise<void>((res) =>
@@ -974,28 +977,25 @@ export function IntroAnimation() {
     )
     if (!overlayScope.current) return
 
-    // Step 2: Hold white 80ms — user registers the flash
-    await new Promise((r) => setTimeout(r, 80))
-
-    // Step 3: scaleY collapse — full white screen → thin horizontal line (450ms)
+    // Step 2: scaleY collapse — no hold, collapse fires immediately (200ms)
     await animateOverlay(
       overlayScope.current,
       { scaleY: 0.008 },
-      { duration: 0.45, ease: [0.4, 0, 1, 1] },
+      { duration: 0.2, ease: [0.4, 0, 1, 1] },
     )
 
-    // Step 4: Diamond appears, line collapses horizontally + diamond collapses (simultaneous)
+    // Step 3: Diamond appears, line + diamond collapse simultaneously (150ms / 120ms)
     setShowDiamond(true)
     await new Promise<void>((res) =>
       requestAnimationFrame(() => requestAnimationFrame(() => res()))
     )
     await Promise.all([
-      animateLine(lineScope.current!, { scaleX: 0 }, { duration: 0.3, ease: 'easeIn' }),
-      animateDiamond(diamondScope.current!, { scale: 0 }, { duration: 0.25, ease: 'easeIn' }),
+      animateLine(lineScope.current!, { scaleX: 0 }, { duration: 0.15, ease: 'easeIn' }),
+      animateDiamond(diamondScope.current!, { scale: 0 }, { duration: 0.12, ease: 'easeIn' }),
     ])
 
-    // Step 5: Black hold 150ms — everything collapsed, dark canvas shows through
-    await new Promise((r) => setTimeout(r, 150))
+    // Step 4: Black hold 60ms
+    await new Promise((r) => setTimeout(r, 60))
 
     // Step 6: Hand off
     setIntroComplete(true)
@@ -1032,39 +1032,42 @@ export function IntroAnimation() {
           cursor: 'crosshair',
         }}
       >
-        <canvas ref={canvasRef} className="absolute inset-0" />
+        {/* Content wrapper — opacity 0 instantly when CRT fires, no transition */}
+        <div style={{ position: 'absolute', inset: 0, opacity: crtFiring ? 0 : 1 }}>
+          <canvas ref={canvasRef} className="absolute inset-0" />
 
-        {showTyping && (
-          <div
-            className="absolute inset-x-0 flex justify-center pointer-events-none"
-            style={{ top: '38%' }}
-          >
+          {showTyping && (
             <div
-              style={{
-                fontFamily: '"IBM Plex Mono", monospace',
-                fontSize: '15px',
-                color: particleColor,
-                letterSpacing: '0.06em',
-                display: 'flex',
-                alignItems: 'center',
-              }}
+              className="absolute inset-x-0 flex justify-center pointer-events-none"
+              style={{ top: '38%' }}
             >
-              <span>{typedText}</span>
-              <span
+              <div
                 style={{
-                  display: 'inline-block',
-                  width: '9px',
-                  height: '17px',
-                  backgroundColor: particleColor,
-                  opacity: showBlink ? 1 : 0,
-                  marginLeft: '2px',
-                  verticalAlign: 'middle',
-                  flexShrink: 0,
+                  fontFamily: '"IBM Plex Mono", monospace',
+                  fontSize: '15px',
+                  color: particleColor,
+                  letterSpacing: '0.06em',
+                  display: 'flex',
+                  alignItems: 'center',
                 }}
-              />
+              >
+                <span>{typedText}</span>
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: '9px',
+                    height: '17px',
+                    backgroundColor: particleColor,
+                    opacity: showBlink ? 1 : 0,
+                    marginLeft: '2px',
+                    verticalAlign: 'middle',
+                    flexShrink: 0,
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* CRT power-off overlay — z:200, mounts on trigger, three-layer sequence */}
         {showCrtOverlay && (

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 100" fill="none">
+  <!-- 2×2 grid background cells (night palette) -->
+  <rect x="0"   y="0"  width="104" height="49" fill="#3d2a08"/>
+  <rect x="106" y="0"  width="104" height="49" fill="#2a0a1a"/>
+  <rect x="0"   y="51" width="104" height="49" fill="#0a1a08"/>
+  <rect x="106" y="51" width="104" height="49" fill="#0a0a2a"/>
+  <!-- Grid border -->
+  <rect x="0" y="0" width="210" height="100" stroke="rgba(0,0,0,0.5)" stroke-width="2"/>
+  <!-- Centre dividers -->
+  <line x1="105" y1="0"   x2="105" y2="100" stroke="rgba(0,0,0,0.5)" stroke-width="2"/>
+  <line x1="0"   y1="50"  x2="210" y2="50"  stroke="rgba(0,0,0,0.5)" stroke-width="2"/>
+  <!-- Scanline texture (approximate — 4px repeat) -->
+  <line x1="0" y1="4"  x2="210" y2="4"  stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="8"  x2="210" y2="8"  stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="12" x2="210" y2="12" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="16" x2="210" y2="16" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="20" x2="210" y2="20" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="24" x2="210" y2="24" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="28" x2="210" y2="28" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="32" x2="210" y2="32" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="36" x2="210" y2="36" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="40" x2="210" y2="40" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="44" x2="210" y2="44" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="48" x2="210" y2="48" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="52" x2="210" y2="52" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="56" x2="210" y2="56" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="60" x2="210" y2="60" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="64" x2="210" y2="64" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="68" x2="210" y2="68" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="72" x2="210" y2="72" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="76" x2="210" y2="76" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="80" x2="210" y2="80" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="84" x2="210" y2="84" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="88" x2="210" y2="88" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="92" x2="210" y2="92" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <line x1="0" y1="96" x2="210" y2="96" stroke="rgba(0,0,0,0.1)" stroke-width="1"/>
+  <!-- ZK overlay text -->
+  <text
+    x="105" y="72"
+    font-family="'Bebas Neue', sans-serif"
+    font-size="62"
+    letter-spacing="4"
+    fill="#FFFFFF"
+    text-anchor="middle"
+    style="text-shadow: 2px 2px 0 rgba(0,0,0,0.9)"
+  >ZK</text>
+</svg>
