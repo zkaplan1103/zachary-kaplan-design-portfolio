@@ -1,11 +1,12 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { motion, AnimatePresence, useAnimate } from 'framer-motion'
+import { motion, AnimatePresence, useAnimate, useSpring, useTransform } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useBezelContext } from '@/contexts/BezelContext'
 import { useUIStore } from '@/store/uiStore'
-import { PokemonTextBox } from '@/components/PokemonTextBox'
+// import { PokemonTextBox } from '@/components/PokemonTextBox'  // kept for in-building use
 import { AmbientEntity, CHARACTER_MANIFEST } from '@/components/ambient/AmbientEntity'
 import { DistrictGuide } from '@/components/DistrictGuide'
+import { NavMarker } from '@/components/NavMarker'
 import type { CharacterDef } from '@/components/ambient/AmbientEntity'
 
 // ─── Sky gradients (5-stop warm sunset) ─────────────────────────────────────
@@ -91,20 +92,15 @@ const CROSS = 1.5 // 1.5s day/night transition
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
-// ─── Cinematic timings ──────────────────────────────────────────────────────
-// Sequence (all times are absolute from click):
-//   t=0ms:   door swing starts (200ms) + guide fade starts (200ms) — PARALLEL
-//   t=200ms: zoom starts (200ms duration)
-//   t=400ms: fade to black starts (150ms) → navigate
-// Total click-to-black: ~550ms. Perceived as snappy.
-const ZOOM_DURATION    = 0.2   // seconds: aggressive world zoom
-const FADE_DELAY_MS    = 200   // ms from zoom-start before fade triggers (=400ms absolute)
-const FADE_DURATION    = 0.15  // seconds: fast cut to black
-const RETURN_DURATION  = 0.7   // seconds: pull-back on return
-const CAMERA_SCALE_MIN = 1.8
-const CAMERA_SCALE_MAX = 3.0
-const DOOR_OPEN_MS     = 200   // ms: door swings (runs parallel to guide fade)
-const GUIDE_WALK_DUR   = 0.35  // seconds: guide walks to door
+// ─── Entry sequence timings ───────────────────────────────────────────────────
+// t=0ms:   guide fade starts (200ms) + door swing starts (300ms) — PARALLEL
+// t=350ms: fade to black (150ms) — door is visibly open, void colour is showing
+// t=500ms: navigate to interior
+// Town stays perfectly still throughout — no scale, no transform-origin.
+const GUIDE_FADE_MS = 200   // ms: guide fades out
+const DOOR_OPEN_MS  = 300   // ms: door swings open (rotateY -90)
+const FADE_START_MS = 350   // ms: absolute time when fade begins
+const FADE_DURATION = 0.15  // seconds: hard cut to black
 
 export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) {
   const navigate = useNavigate()
@@ -118,13 +114,40 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
   const toggleNight = useUIStore((s) => s.toggleNight)
   const [hoveredBuilding, setHoveredBuilding] = useState<string | null>(null)
   const [clickedBuilding, setClickedBuilding] = useState<string | null>(null)
-  const [mouseNorm, setMouseNorm] = useState(0) // -1 to 1
+  // mouseNorm: raw -1→1 value used synchronously for click math & guide walk
+  const [mouseNorm, setMouseNorm] = useState(0)
 
   const [fadeScope,   animateFade]   = useAnimate()
-  const [worldScope,  animateWorld]  = useAnimate()
   const [guideAScope, animateGuideA] = useAnimate()
   const [guideBScope, animateGuideB] = useAnimate()
   const containerRef = useRef<HTMLDivElement>(null)
+
+  // Track each guide's current x so we can derive facing direction on next move
+  const guideAX = useRef(0)  // updated whenever we animate Guide A
+  const guideBX = useRef(0)  // updated whenever we animate Guide B
+
+  // Facing direction state — 1 = right, -1 = left
+  const [guideAFacing, setGuideAFacing] = useState<1 | -1>(1)
+  const [guideBFacing, setGuideBFacing] = useState<1 | -1>(-1)
+
+  // ── Spring-damped parallax camera ────────────────────────────────────────
+  // mouseSpring smoothly trails mouseNorm — stiffness:50 damping:20 gives
+  // a gentle "settle" after the mouse stops (overshoots slightly then rests).
+  // MotionValues drive layer transforms directly — no React re-render per frame.
+  const mouseSpring = useSpring(mouseNorm, { stiffness: 50, damping: 20 })
+
+  // Per-layer x offsets in px (MotionValues — applied via style={{ x: mv }})
+  // Zero-point = mouse at center (mouseNorm=0). Mouse right → layers shift left.
+  // Layer speeds: sky 2%, celestial 4%, mesa 8%, buildings 15%, ground 25%
+  const skyMV       = useTransform(mouseSpring, v => v * sw * -0.02)
+  const celestialMV = useTransform(mouseSpring, v => v * sw * -0.04)
+  const mesaMV      = useTransform(mouseSpring, v => v * sw * -0.08)
+  const buildingsMV = useTransform(mouseSpring, v => v * sw * -0.15)
+  const groundMV    = useTransform(mouseSpring, v => v * sw * -0.25)
+
+  // Synchronous buildingsX for click math (uses raw mouseNorm, not the spring)
+  // This keeps door focal point calculation correct at the instant of click.
+  const buildingsX = mouseNorm * sw * -0.15
 
   // ── Derived values (need sw/sh — computed before any effect) ─────────────
   const palette = isNight ? NIGHT : DAY
@@ -135,12 +158,7 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
   const gridHeight  = gridWidth / 2.1
   const gridCapped  = gridNatural > sw * 0.8
 
-  // Mouse parallax offsets
-  const skyX       = mouseNorm * -15
-  const buildingsX = mouseNorm * -30
-  const groundX    = mouseNorm * -45
-
-  // Lock parallax during zoom
+  // Lock parallax during zoom — freeze spring at 0 when zooming
   const isZooming = clickedBuilding !== null
 
   // Building center lookup — pixel widths relative to each district container
@@ -174,33 +192,11 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
     return map
   })()
 
-  // ── Pull-back on return from interior ────────────────────────────────────
-  const didReturn = useRef(false)
+  // ── Freeze spring while transition plays so layers don't drift ──────────
+  // jump() to current value — stops spring motion without resetting position.
   useEffect(() => {
-    if (!entryBuilding || didReturn.current || !worldScope.current) return
-    didReturn.current = true
-    const info = buildingInfo[entryBuilding]
-    if (!info) return
-
-    const S = Math.min(CAMERA_SCALE_MAX, Math.max(CAMERA_SCALE_MIN, 0.50 / info.hPct))
-    // On return, mouseNorm = 0, buildingsX = 0, so doorX = info.cx
-    const doorX = info.cx
-    const doorY = sh * 0.90
-
-    worldScope.current.style.transformOrigin = `${doorX}px ${doorY}px`
-    animateWorld(worldScope.current, { scale: S }, { duration: 0 })
-
-    setTimeout(() => {
-      animateWorld(
-        worldScope.current,
-        { scale: 1 },
-        { duration: RETURN_DURATION, ease: [0.2, 0, 0.4, 1] }
-      ).then(() => {
-        if (worldScope.current) worldScope.current.style.transformOrigin = '50% 50%'
-      })
-    }, 100)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    if (isZooming) mouseSpring.jump(mouseSpring.get())
+  }, [isZooming, mouseSpring])
 
   // ── Ambient character spawner ────────────────────────────────────────────
   type ActiveChar = { instanceId: string; def: CharacterDef; direction: 'ltr' | 'rtl' }
@@ -246,80 +242,94 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isNight])
 
-  // ── District guide hover walk ────────────────────────────────────────────
+  // ── District guide walk ───────────────────────────────────────────────────
+  // Home base: 20px to the left of each district's first building door centre.
+  // Guide A idles next to Building 1 (saloon). Guide B next to Building 4 (bank).
+  // On hover: walk to that building's door. On un-hover: walk home.
+  // Facing direction is derived from current x vs target x — guide flips before moving.
+
+  const WALK_DUR  = 1.5    // seconds — steady, weighted walk
+  const WALK_EASE = 'easeInOut' as const
+
+  // Anchor helpers — world-space x (no buildingsX — the parent layer handles pan)
+  const guideAHome = (() => {
+    const info = buildingInfo[DISTRICT_A[0].id]   // saloon
+    if (!info) return sw * 0.02
+    return info.cx - info.bw / 2 - 20  // left edge of saloon - 20px
+  })()
+
+  const guideBHome = (() => {
+    const info = buildingInfo[DISTRICT_B[0].id]   // bank
+    if (!info) return sw * 0.65
+    return info.cx - info.bw / 2 - 20  // left edge of bank - 20px
+  })()
+
+  const moveGuide = useCallback((
+    scope: React.RefObject<HTMLDivElement | null>,
+    animate: (el: Element, keyframes: Record<string, unknown>, opts?: Record<string, unknown>) => void,
+    targetX: number,
+    currentXRef: React.MutableRefObject<number>,
+    setFacing: (f: 1 | -1) => void,
+  ) => {
+    if (!scope.current) return
+    const facing: 1 | -1 = targetX >= currentXRef.current ? 1 : -1
+    setFacing(facing)
+    currentXRef.current = targetX
+    animate(scope.current, { x: targetX }, { duration: WALK_DUR, ease: WALK_EASE })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   useEffect(() => {
     if (isZooming) return
     const inA = hoveredBuilding ? DISTRICT_A.some((b) => b.id === hoveredBuilding) : false
     const inB = hoveredBuilding ? DISTRICT_B.some((b) => b.id === hoveredBuilding) : false
 
-    // Guide A homes to left edge of District A container
-    const aHomeX = sw * 0.02
-
+    // Guide A
     if (inA && hoveredBuilding) {
       const info = buildingInfo[hoveredBuilding]
-      if (info && guideAScope.current) {
-        const targetX = info.cx + buildingsX - 10
-        animateGuideA(guideAScope.current, { x: targetX }, { duration: GUIDE_WALK_DUR, ease: [0.4, 0, 0.6, 1] })
+      if (info) {
+        const targetX = info.cx - 10   // world-space; parent layer handles pan
+        moveGuide(guideAScope, animateGuideA, targetX, guideAX, setGuideAFacing)
       }
-    } else if (guideAScope.current) {
-      animateGuideA(guideAScope.current, { x: aHomeX }, { duration: GUIDE_WALK_DUR, ease: [0.4, 0, 0.6, 1] })
+    } else {
+      moveGuide(guideAScope, animateGuideA, guideAHome, guideAX, setGuideAFacing)
     }
 
-    // Guide B homes to left edge of District B container
-    const bContainerPct = DISTRICT_B.reduce((s, b) => s + b.w, 0) + (DISTRICT_B.length - 1) * 0.8
-    const bContainerW   = sw * bContainerPct / 100
-    const bHomeX        = sw * 0.98 - bContainerW
-
+    // Guide B
     if (inB && hoveredBuilding) {
       const info = buildingInfo[hoveredBuilding]
-      if (info && guideBScope.current) {
-        const targetX = info.cx + buildingsX - 10
-        animateGuideB(guideBScope.current, { x: targetX }, { duration: GUIDE_WALK_DUR, ease: [0.4, 0, 0.6, 1] })
+      if (info) {
+        const targetX = info.cx - 10   // world-space; parent layer handles pan
+        moveGuide(guideBScope, animateGuideB, targetX, guideBX, setGuideBFacing)
       }
-    } else if (guideBScope.current) {
-      animateGuideB(guideBScope.current, { x: bHomeX }, { duration: GUIDE_WALK_DUR, ease: [0.4, 0, 0.6, 1] })
+    } else {
+      moveGuide(guideBScope, animateGuideB, guideBHome, guideBX, setGuideBFacing)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hoveredBuilding, buildingsX, isZooming])
+  }, [hoveredBuilding, isZooming, guideAHome, guideBHome])
 
-  // ── World-camera zoom → fade → navigate ─────────────────────────────────
+  // ── Door reveal → fade → navigate ────────────────────────────────────────
+  // Town stays still. Sequence:
+  //   t=0ms:   guide fade (200ms) + door swing (300ms) run in parallel
+  //   t=350ms: fade to black (150ms) — door open, void colour visible
+  //   t=500ms: navigate
   const handleBuildingClick = useCallback(async (
     buildingId: string,
-    doorX: number,
-    bldgHPct: number,
-    screenH: number,
     inDistrictA: boolean,
   ) => {
     if (clickedBuilding) return
     setClickedBuilding(buildingId)
     setHoveredBuilding(null)
 
-    // t=0ms: door swing + guide fade fire in PARALLEL (both 200ms)
-    const guideScope  = inDistrictA ? guideAScope : guideBScope
-    const animGuide   = inDistrictA ? animateGuideA : animateGuideB
+    // t=0: guide fades out (200ms), door swings via clickedBuilding state (300ms)
+    const guideScope = inDistrictA ? guideAScope : guideBScope
+    const animGuide  = inDistrictA ? animateGuideA : animateGuideB
     if (guideScope.current) {
-      animGuide(guideScope.current, { opacity: 0 }, { duration: DOOR_OPEN_MS / 1000, ease: 'easeOut' })
+      animGuide(guideScope.current, { opacity: 0 }, { duration: GUIDE_FADE_MS / 1000, ease: 'easeOut' })
     }
-    // (door leaf animates via React state — clickedBuilding already set above)
 
-    // t=200ms: await the parallel animations, then start zoom immediately
-    await new Promise((r) => setTimeout(r, DOOR_OPEN_MS))
-
-    const S = Math.min(CAMERA_SCALE_MAX, Math.max(CAMERA_SCALE_MIN, 0.50 / bldgHPct))
-    const doorY = screenH * 0.90
-
-    // Set transform-origin to door focal point, fire zoom
-    if (worldScope.current) {
-      worldScope.current.style.transformOrigin = `${doorX}px ${doorY}px`
-    }
-    animateWorld(
-      worldScope.current,
-      { scale: S },
-      { duration: ZOOM_DURATION, ease: [0.6, 0, 1, 1] }   // aggressive ease-in: fast start
-    )
-
-    // t=400ms: fade to black (200ms into zoom = FADE_DELAY_MS after zoom start)
-    await new Promise((r) => setTimeout(r, FADE_DELAY_MS))
+    // t=350ms: door is visibly open — cut to black
+    await new Promise((r) => setTimeout(r, FADE_START_MS))
     await animateFade(
       fadeScope.current,
       { opacity: 1 },
@@ -328,15 +338,16 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
 
     navigate(`/building/${buildingId}`, { state: { fromBuilding: buildingId } })
   }, [clickedBuilding, guideAScope, guideBScope, animateGuideA, animateGuideB,
-      animateWorld, worldScope, animateFade, fadeScope, navigate])
+      animateFade, fadeScope, navigate])
 
   // ── Mouse parallax handler ───────────────────────────────────────────────
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
-    const norm = (e.clientX - rect.left) / rect.width - 0.5
-    setMouseNorm(norm * 2)
-  }, [])
+    const norm = ((e.clientX - rect.left) / rect.width - 0.5) * 2  // -1 to 1
+    setMouseNorm(norm)      // sync value for click math
+    mouseSpring.set(norm)   // spring target — animates toward this value
+  }, [mouseSpring])
 
   return (
     <div
@@ -347,37 +358,31 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
         inset: 0,
         overflow: 'hidden',
         cursor: 'default',
-        willChange: isZooming ? 'transform' : 'auto',
       }}
     >
       {/* ══════════════════════════════════════════════════════════════════════
           WORLD CONTAINER — everything that zooms with the camera.
           UI elements (toggle, textbox, fade overlay) sit OUTSIDE this wrapper.
       ══════════════════════════════════════════════════════════════════════ */}
-      <motion.div
-        ref={worldScope}
+      <div
         style={{
-          position:   'absolute',
-          inset:      0,
-          willChange: 'transform',   // always GPU-promoted — no promotion lag on click
+          position: 'absolute',
+          inset:    0,
         }}
       >
 
-      {/* ═══════ z:10 — SKY GRADIENT (parallax layer 1) ═══════ */}
+      {/* ═══════ z:10 — SKY GRADIENT (parallax layer 1, -2% shift) ═══════ */}
       <motion.div
         animate={{ background: isNight ? NIGHT_SKY : DAY_SKY }}
         transition={{ duration: CROSS }}
         style={{
-          position:  'absolute',
-          inset:     0,
-          zIndex:    10,
-          width:     '115%',
-          left:      '-7.5%',
-          transform: `translateX(${skyX}px)`,
-          // CSS transition only for the parallax transform — FM handles background
-          transitionProperty: 'transform',
-          transitionDuration: '0.3s',
-          transitionTimingFunction: 'ease-out',
+          position: 'absolute',
+          top:      0,
+          bottom:   0,
+          left:     '-30%',
+          width:    '160%',
+          zIndex:   10,
+          x:        skyMV,
         }}
       />
 
@@ -389,7 +394,7 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: CROSS }}
-            style={{ position: 'absolute', inset: 0, zIndex: 11, pointerEvents: 'none' }}
+            style={{ position: 'absolute', top: 0, bottom: 0, left: '-30%', width: '160%', zIndex: 11, pointerEvents: 'none', x: skyMV }}
           >
             {STARS.map((star, i) => (
               <motion.div
@@ -431,8 +436,58 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
           borderRadius: '50%',
           pointerEvents: 'none',
           zIndex: 12,
+          x: celestialMV,
         }}
       />
+
+      {/* ═══════ z:14 — MESA HORIZON (parallax layer 2.5, -8% shift) ═══════ */}
+      {/* SVG fills 160% world-width. Horizon sits at bottom 30% of sky zone.  */}
+      {/* Single flat-top mesa silhouette: two plateaus with a saddle between. */}
+      <motion.div
+        style={{
+          position:      'absolute',
+          bottom:        sh * 0.10,   // sits flush on top of ground
+          left:          '-30%',
+          width:         '160%',
+          height:        sh * 0.35,   // tall enough to show full profile
+          zIndex:        14,
+          pointerEvents: 'none',
+          x:             mesaMV,
+        }}
+      >
+        <svg
+          viewBox="0 0 160 100"
+          preserveAspectRatio="none"
+          width="100%"
+          height="100%"
+          style={{ display: 'block' }}
+        >
+          {/* Mesa path: left plateau, saddle, right wider plateau, then fill to bottom */}
+          {/* Coordinates in viewBox units (160×100):                                   */}
+          {/*   lower-left corner → climb left mesa → flat top → saddle dip →          */}
+          {/*   right mesa wider & slightly lower → descend → lower-right corner        */}
+          <path
+            d={[
+              'M 0 100',        // bottom-left
+              'L 0 72',         // left edge rises
+              'L 14 42',        // left mesa shoulder
+              'L 28 40',        // left plateau top (flat)
+              'L 38 52',        // saddle dip
+              'L 50 48',        // saddle floor
+              'L 62 52',        // saddle dip right side
+              'L 76 36',        // right mesa left shoulder
+              'L 106 35',       // right plateau top (wider, slightly lower)
+              'L 124 48',       // right mesa right shoulder
+              'L 138 58',       // tail ridge
+              'L 160 62',       // right edge
+              'L 160 100',      // bottom-right
+              'Z',
+            ].join(' ')}
+            fill={isNight ? '#2D2430' : '#BCAAA4'}
+            style={{ transition: `fill ${CROSS}s` }}
+          />
+        </svg>
+      </motion.div>
 
       {/* ═══════ z:35 — 2×2 TITLE CARD ═══════ */}
       <motion.div
@@ -554,7 +609,7 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
         { district: DISTRICT_A, anchor: { left: '2%'  } },
         { district: DISTRICT_B, anchor: { right: '2%' } },
       ].map(({ district, anchor }) => (
-        <div
+        <motion.div
           key={JSON.stringify(anchor)}
           style={{
             position:   'absolute',
@@ -567,8 +622,7 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
             gap:        `${sw * 0.006}px`,
             zIndex:     30,
             overflow:   'hidden',
-            transform:  `translateX(${buildingsX}px)`,
-            transition: 'transform 0.3s ease-out',
+            x:          buildingsMV,
           }}
         >
           {district.map((bldg) => {
@@ -581,17 +635,16 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
                 onMouseEnter={() => !isZooming && setHoveredBuilding(bldg.id)}
                 onMouseLeave={() => setHoveredBuilding(null)}
                 onClick={() => {
-                  if (isZooming || !info) return
+                  if (isZooming) return
                   handleBuildingClick(
                     bldg.id,
-                    info.cx + buildingsX,
-                    bldg.hPct,
-                    sh,
                     DISTRICT_A.some((b) => b.id === bldg.id),
                   )
                 }}
                 animate={{
-                  filter: isHovered ? 'brightness(1.5)' : 'brightness(1)',
+                  filter: isHovered
+                    ? 'drop-shadow(0 0 15px rgba(255,255,255,0.4)) brightness(1.15)'
+                    : 'brightness(1)',
                 }}
                 transition={{ duration: 0.3 }}
                 style={{
@@ -695,25 +748,26 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
                     }}
                   />
                 </div>
+
+                {/* Nav labels rendered in the shared z:100 overlay below */}
               </motion.div>
             )
           })}
-        </div>
+        </motion.div>
       ))}
 
-      {/* ═══════ z:15 — GROUND (parallax layer 3) ═══════ */}
+      {/* ═══════ z:15 — GROUND (parallax layer 4, -25% shift) ═══════ */}
       <motion.div
         animate={{ background: isNight ? NIGHT_GROUND : DAY_GROUND }}
         transition={{ duration: CROSS }}
         style={{
           position: 'absolute',
-          bottom: 0,
-          left: '-7.5%',
-          width: '115%',
-          height: sh * 0.10,
-          zIndex: 15,
-          transform: `translateX(${groundX}px)`,
-          transition: 'transform 0.3s ease-out',
+          bottom:   0,
+          left:     '-30%',
+          width:    '160%',
+          height:   sh * 0.10,
+          zIndex:   15,
+          x:        groundMV,
         }}
       />
 
@@ -749,23 +803,44 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
         }}
       />
 
-      {/* ═══════ z:55 — DISTRICT GUIDES ═══════ */}
-      {/* initialX anchors each guide at their home position on first render,  */}
-      {/* preventing a flash from left:0 before the hover effect drives them.  */}
-      {(() => {
-        const aHomeX = sw * 0.02
-        const bContainerPct = DISTRICT_B.reduce((s, b) => s + b.w, 0) + (DISTRICT_B.length - 1) * 0.8
-        const bContainerW   = sw * bContainerPct / 100
-        const bHomeX        = sw * 0.98 - bContainerW
-        return (
-          <>
-            <DistrictGuide guideScope={guideAScope} isNight={isNight} sh={sh} facingRight={true}  initialX={aHomeX} />
-            <DistrictGuide guideScope={guideBScope} isNight={isNight} sh={sh} facingRight={false} initialX={bHomeX} />
-          </>
-        )
-      })()}
+      {/* ═══════ z:100 — NAV LABELS + DISTRICT GUIDES (building-layer overlay) ═══════ */}
+      {/* This layer shares buildingsMV so labels and guides always track the buildings  */}
+      {/* exactly. overflow:visible lets labels pop above the roofline without clipping. */}
+      <motion.div
+        style={{
+          position:      'absolute',
+          inset:         0,
+          zIndex:        100,
+          pointerEvents: 'none',
+          overflow:      'visible',
+          x:             buildingsMV,
+        }}
+      >
+        {/* Nav labels — one per building, centred on building cx, 30px above roofline */}
+        {[...DISTRICT_A, ...DISTRICT_B].map((bldg) => {
+          const info = buildingInfo[bldg.id]
+          if (!info) return null
+          const roofY = sh * 0.90 - sh * bldg.hPct   // sh*0.90 = ground top; roofline = ground - building height
+          return (
+            <NavMarker
+              key={bldg.id}
+              buildingId={bldg.id}
+              cx={info.cx}
+              roofY={roofY}
+              isHovered={hoveredBuilding === bldg.id}
+              isNight={isNight}
+            />
+          )
+        })}
 
+        {/* District guides — rendered here so they pan with buildings automatically.   */}
+        {/* Their x is driven by useAnimate (hover walk logic), which sets absolute px   */}
+        {/* within this layer. This layer's own x (buildingsMV) handles the pan offset. */}
+        <DistrictGuide guideScope={guideAScope} isNight={isNight} sh={sh} initialX={guideAHome} scaleX={guideAFacing} />
+        <DistrictGuide guideScope={guideBScope} isNight={isNight} sh={sh} initialX={guideBHome} scaleX={guideBFacing} />
       </motion.div>
+
+      </div>
       {/* END WORLD CONTAINER ════════════════════════════════════════════════ */}
 
       {/* ═══════ z:42 — UI LAYER (outside world container, no zoom) ═══════ */}
@@ -822,15 +897,14 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
       </motion.p>
 
       {/* ═══════ z:51 — MINI-HORSE EASTER EGG ═══════ */}
-      <div
+      <motion.div
         style={{
           position:      'absolute',
           bottom:        sh * 0.10,
           left:          sw + 10,
-          transform:     `translateX(${groundX}px)`,
-          transition:    'transform 0.3s ease-out',
           zIndex:        51,
           pointerEvents: 'none',
+          x:             groundMV,
         }}
       >
         <svg viewBox="0 0 28 20" width="28" height="20" fill="none" aria-label="mini horse easter egg">
@@ -844,9 +918,10 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
           <line x1="21" y1="17" x2="22" y2="20" stroke="#00ff88" strokeWidth="1.5"/>
           <path d="M23 11 Q27 9 26 7" stroke="#00ff88" strokeWidth="1.5" fill="none"/>
         </svg>
-      </div>
+      </motion.div>
 
-      {/* ═══════ z:45 — POKÉMON TEXT BOX ═══════ */}
+      {/* ═══════ z:45 — POKÉMON TEXT BOX (reserved for in-building use) ═══════ */}
+      {/* Kept for use inside interiors — uncomment when interior dialogue is needed.
       {!isZooming && (
         <PokemonTextBox
           buildingId={hoveredBuilding}
@@ -866,6 +941,7 @@ export function WesternTown({ entryBuilding }: { entryBuilding?: string } = {}) 
           })()}
         />
       )}
+      */}
 
       {/* ═══════ z:200 — CINEMATIC FADE OVERLAY ═══════ */}
       <motion.div

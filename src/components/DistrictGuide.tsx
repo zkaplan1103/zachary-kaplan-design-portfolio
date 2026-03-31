@@ -4,17 +4,17 @@ import { motion } from 'framer-motion'
 
 interface DistrictGuideProps {
   guideScope: React.RefObject<HTMLDivElement | null>
-  isNight: boolean
-  sh: number
-  facingRight: boolean  // true = Guide A (District A, faces right toward stage)
-  initialX: number      // home x position — prevents flash at left:0 on mount
+  isNight:    boolean
+  sh:         number
+  initialX:   number   // home x on mount — prevents flash at left:0
+  scaleX:     number   // 1 = faces right, -1 = faces left (controlled by parent)
 }
 
 // ─── SVG cowboy pixel-art silhouette ──────────────────────────────────────────
-// 20×30 viewBox cowboy: hat, head, body, arms, legs, spurs.
-// Color: warm gold in night, dark brown in day.
+// 20×30 viewBox. Color: warm gold at night, dark brown in day.
+// scaleX flip lives on the wrapper div so the motion.div x is unaffected.
 
-function CowboySvg({ color, facingRight }: { color: string; facingRight: boolean }) {
+function CowboySvg({ color }: { color: string }) {
   return (
     <svg
       viewBox="0 0 20 30"
@@ -25,7 +25,7 @@ function CowboySvg({ color, facingRight }: { color: string; facingRight: boolean
       strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"
-      style={{ transform: facingRight ? 'scaleX(1)' : 'scaleX(-1)', display: 'block' }}
+      style={{ display: 'block' }}
       aria-hidden="true"
     >
       {/* Hat brim */}
@@ -51,7 +51,7 @@ function CowboySvg({ color, facingRight }: { color: string; facingRight: boolean
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function DistrictGuide({ guideScope, isNight, sh, facingRight, initialX }: DistrictGuideProps) {
+export function DistrictGuide({ guideScope, isNight, sh, initialX, scaleX }: DistrictGuideProps) {
   const color = isNight ? '#c9a96e' : '#5a3a10'
 
   return (
@@ -59,15 +59,21 @@ export function DistrictGuide({ guideScope, isNight, sh, facingRight, initialX }
       ref={guideScope as React.RefObject<HTMLDivElement>}
       initial={{ x: initialX, opacity: 1 }}
       style={{
-        position:        'absolute',
-        bottom:          sh * 0.10,   // ground plane
-        left:            0,           // x driven by animateGuideA/B via motion value
-        zIndex:          55,
-        pointerEvents:   'none',
-        transformOrigin: 'bottom center',
+        position:      'absolute',
+        bottom:        sh * 0.10,
+        left:          0,
+        zIndex:        55,
+        pointerEvents: 'none',
       }}
     >
-      <CowboySvg color={color} facingRight={facingRight} />
+      {/* Inner wrapper handles the flip so x translation is uncontaminated */}
+      <motion.div
+        animate={{ scaleX }}
+        transition={{ duration: 0.2, ease: 'easeInOut' }}
+        style={{ transformOrigin: 'center bottom', display: 'inline-block' }}
+      >
+        <CowboySvg color={color} />
+      </motion.div>
     </motion.div>
   )
 }
