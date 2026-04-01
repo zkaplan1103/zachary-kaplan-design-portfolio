@@ -30,23 +30,30 @@ const ZOOM_Y_PCT    = 0.18
 
 // ─── 3D Hinge geometry ───────────────────────────────────────────────────────
 //
-// Perspective: 1200px on parent — prevents "fading" look on rotateX.
+// Perspective: 1200px on the hinge wrapper — prevents transparency artefacts.
 //
-// The "L-shape fold":
-//   Interior exits:  rotateX(0) → rotateX(-90deg), origin = bottom
-//   Surface enters:  rotateX(90deg) → rotateX(0),  origin = top
+// L-shape fold:
+//   Interior exits:  rotateX(0°) → rotateX(-90°), origin = center bottom
+//   Surface enters:  rotateX(90°) → rotateX(0°),  origin = center top
 //
-// Both animate simultaneously for 400ms — they share a hinge axis at
-// the centre-bottom / centre-top boundary, creating a seamless 90° fold.
-const PERSPECTIVE       = 1200   // px — on the hingeWrapper div
-const LEAN_SCALE        = 4.5    // punch-in scale before fold
-const LEAN_DURATION     = 0.3    // seconds
-const LEAN_Y_EXTRA      = 0.08
-const HINGE_DURATION    = 0.4    // seconds — simultaneous fold
-const HINGE_EASE        = [0.4, 0, 0.2, 1] as const
-// Surface spring — high damping so it THUDS, no bounce
-const SURFACE_STIFFNESS = 320
-const SURFACE_DAMPING   = 48
+// Both panels STAY MOUNTED during the full transition (including Look Up).
+// Surface only unmounts after the zoom-out completes.
+//
+// Look Up sequence:
+//   1. isTransitioning = true (single guard, blocks all input)
+//   2. Reverse fold simultaneously (both 400ms circOut)
+//   3. Surface is still mounted but edge-on (rotateX:90) — invisible, safe
+//   4. onAnimationComplete fires → zoom-out 4.5× → 1×
+//   5. setShowSurface(false) + reset state
+//
+const PERSPECTIVE     = 1200
+const LEAN_SCALE      = 4.5
+const LEAN_DURATION   = 0.3
+const LEAN_Y_EXTRA    = 0.08
+const HINGE_DURATION  = 0.4
+// circOut: fast-in, asymptotic settle — feels weighted/physical
+const HINGE_EASE      = [0.0, 0.0, 0.2, 1.0] as const   // approx circOut
+const ZOOM_OUT_EASE   = [0.4, 0, 0.6, 1] as const
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
@@ -61,26 +68,31 @@ export function BuildingInteriorPage() {
 
   const isNight = useUIStore((s) => s.isNight)
 
-  const [overlayScope,  animateOverlay]  = useAnimate()
-  const [stageScope,    animateStage]    = useAnimate()   // room zoom + lean
-  const [roomScope,     animateRoom]     = useAnimate()   // room rotateX exit
-  const [surfaceScope,  animateSurface]  = useAnimate()   // surface rotateX entry
+  const [overlayScope, animateOverlay] = useAnimate()
+  const [stageScope,   animateStage]   = useAnimate()  // zoom + lean — stageScope IS the perspective container
+  const [roomScope,    animateRoom]    = useAnimate()  // room rotateX
+  const [surfaceScope, animateSurface] = useAnimate()  // surface rotateX
+
   const hasFadedIn = useRef(false)
 
-  const stageRef    = useRef<HTMLDivElement>(null)
+  const stageRef = useRef<HTMLDivElement>(null)
   const [mouseNorm, setMouseNorm] = useState(0)
   const mouseSpring = useSpring(mouseNorm, SPRING_CONFIG)
 
+  // ── Single isTransitioning guard — blocks all input mid-animation ──
+  const [isTransitioning, setIsTransitioning] = useState(false)
+
   // ── State machine: wide → zoomed → tilted ──
-  const [isZoomed,      setIsZoomed]      = useState(false)
-  const [isTilted,      setIsTilted]      = useState(false)
-  const [lookUpDisabled, setLookUpDisabled] = useState(false)
-  const [showDialogue,  setShowDialogue]  = useState(false)
-  const [showSurface,   setShowSurface]   = useState(false)
-  const [showMenu,      setShowMenu]      = useState(false)
+  const [isZoomed,     setIsZoomed]     = useState(false)
+  const [isTilted,     setIsTilted]     = useState(false)
+  const [showDialogue, setShowDialogue] = useState(false)
+  const [showSurface,  setShowSurface]  = useState(false)
+  const [showMenu,     setShowMenu]     = useState(false)
   const [showMenuLabel, setShowMenuLabel] = useState(false)
 
-  const hingeLock = useRef(false)
+  // Tracks that we're in the Look Up reverse — used to gate zoom-out
+  // after the hinge rotation's onAnimationComplete fires
+  const lookUpPendingZoomOut = useRef(false)
 
   const onMouseMove = useCallback((e: React.MouseEvent) => {
     if (isZoomed || isTilted) return
@@ -94,23 +106,17 @@ export function BuildingInteriorPage() {
   const dialogue     = buildingId ? BUILDING_DIALOGUES[buildingId] : null
   const fromBuilding = (location.state as { fromBuilding?: string } | null)?.fromBuilding
 
-  // ── Entry ──
+  // ── Entry fade ──
   useEffect(() => {
     if (hasFadedIn.current) return
     hasFadedIn.current = true
     requestAnimationFrame(() =>
       requestAnimationFrame(async () => {
         await Promise.all([
-          animateOverlay(
-            overlayScope.current,
-            { opacity: 0 },
-            { duration: FADE_IN_DURATION, ease: 'easeOut' }
-          ),
-          animateStage(
-            stageScope.current,
-            { scale: 1 },
-            { duration: 0.6, ease: [0.2, 0, 0.4, 1] }
-          ),
+          animateOverlay(overlayScope.current, { opacity: 0 },
+            { duration: FADE_IN_DURATION, ease: 'easeOut' }),
+          animateStage(stageScope.current, { scale: 1 },
+            { duration: 0.6, ease: [0.2, 0, 0.4, 1] }),
         ])
       })
     )
@@ -118,157 +124,135 @@ export function BuildingInteriorPage() {
 
   // ── Barkeep click → zoom-to-seat ──
   const handleBarkeepClick = useCallback(async () => {
-    if (isZoomed) return
+    if (isZoomed || isTransitioning) return
+    setIsTransitioning(true)
     setIsZoomed(true)
     mouseSpring.jump(mouseSpring.get())
 
-    await animateStage(
-      stageScope.current,
+    await animateStage(stageScope.current,
       { scale: ZOOM_SCALE, y: sh * ZOOM_Y_PCT },
       { duration: ZOOM_DURATION, ease: 'easeOut' }
     )
     setShowDialogue(true)
-  }, [isZoomed, mouseSpring, animateStage, stageScope, sh])
+    setIsTransitioning(false)
+  }, [isZoomed, isTransitioning, mouseSpring, animateStage, stageScope, sh])
 
-  // ── Continue → 3D Hinge ("Look Down") ──
+  // ── Continue → 3D Hinge "Look Down" ──
   const handleContinue = useCallback(async () => {
-    if (isTilted || hingeLock.current) return
-    hingeLock.current = true
+    if (isTilted || isTransitioning) return
+    setIsTransitioning(true)
     setShowDialogue(false)
     setIsTilted(true)
 
-    // Phase 1 — Lean in: punch to 4.5× while room pitches -15°
-    await animateStage(
-      stageScope.current,
-      {
-        scale:   LEAN_SCALE,
-        y:       sh * (ZOOM_Y_PCT + LEAN_Y_EXTRA),
-        rotateX: -15,
-      },
+    // Phase 1: Lean in — punch to 4.5× while room pitches -15°
+    await animateStage(stageScope.current,
+      { scale: LEAN_SCALE, y: sh * (ZOOM_Y_PCT + LEAN_Y_EXTRA), rotateX: -15 },
       { duration: LEAN_DURATION, ease: [0.4, 0, 0.7, 1] }
     )
 
-    // Mount surface (starts at rotateX:90 via initial prop, invisible)
+    // Mount surface (starts at rotateX:90 via initial — edge-on, invisible)
     setShowSurface(true)
-
-    // One rAF so React mounts the surface div before we fire the hinge
     await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
 
-    // Phase 2 — Simultaneous hinge fold:
-    //   Room:    rotateX -15 → -90  (origin: bottom — wall falls forward)
-    //   Surface: rotateX  90 →   0  (origin: top    — table swings up)
+    // Phase 2: Simultaneous hinge fold — circOut on both panels
     await Promise.all([
-      animateRoom(
-        roomScope.current,
-        { rotateX: -90 },
-        { duration: HINGE_DURATION, ease: HINGE_EASE }
+      animateRoom(roomScope.current, { rotateX: -90 },
+        { duration: HINGE_DURATION, ease: HINGE_EASE }),
+      animateSurface(surfaceScope.current, { rotateX: 0 },
+        { duration: HINGE_DURATION, ease: HINGE_EASE }),
+    ])
+
+    setIsTransitioning(false)
+    // Menu appears via handleSurfaceSettled (onAnimationComplete on surfaceScope)
+  }, [
+    isTilted, isTransitioning,
+    animateStage, stageScope,
+    animateRoom, roomScope,
+    animateSurface, surfaceScope, sh,
+  ])
+
+  // Called when the surface animation fully completes (fold-down)
+  const handleSurfaceSettled = useCallback(() => {
+    // If we're doing a Look Up reverse, fire the zoom-out instead of showing menu
+    if (lookUpPendingZoomOut.current) {
+      lookUpPendingZoomOut.current = false
+      void performZoomOut()
+      return
+    }
+    setShowMenu(true)
+    setTimeout(() => setShowMenuLabel(true), 300)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Zoom-out step, extracted so it can be called from handleSurfaceSettled
+  const performZoomOut = useCallback(async () => {
+    // Room scale is already at LEAN_SCALE from the tilt phase.
+    // Animate back to ZOOM_SCALE (barkeep framed), rotateX back to 0.
+    await Promise.all([
+      animateStage(stageScope.current,
+        { scale: ZOOM_SCALE, y: sh * ZOOM_Y_PCT, rotateX: 0 },
+        { duration: 0.5, ease: ZOOM_OUT_EASE }
       ),
-      animateSurface(
-        surfaceScope.current,
-        { rotateX: 0 },
-        {
-          type:      'spring',
-          stiffness: SURFACE_STIFFNESS,
-          damping:   SURFACE_DAMPING,
-        }
+      animateRoom(roomScope.current, { rotateX: 0 },
+        { duration: 0.5, ease: ZOOM_OUT_EASE }
       ),
     ])
 
-    hingeLock.current = false
-    // Menu appears when surface spring settles (via onAnimationComplete on surfaceScope)
-  }, [
-    isTilted, animateStage, stageScope,
-    animateRoom, roomScope, animateSurface, surfaceScope, sh,
-  ])
-
-  // Called by surface spring's onAnimationComplete
-  const handleSurfaceSettled = useCallback(() => {
-    setShowMenu(true)
-    setTimeout(() => setShowMenuLabel(true), 300)
-  }, [])
+    // Surface is now edge-on and invisible — safe to unmount
+    setShowSurface(false)
+    setIsTilted(false)
+    setShowDialogue(true)
+    setIsTransitioning(false)
+  }, [animateStage, stageScope, animateRoom, roomScope, sh])
 
   // ── "Look Up" — reverse hinge ──
-  const handleExit = async () => {
+  const handleExit = useCallback(async () => {
+    if (isTransitioning) return
+
+    // ── Tilted: reverse the hinge, then zoom out ──
     if (isTilted) {
-      // Step 1: Disable button immediately to prevent double-fire
-      if (lookUpDisabled || hingeLock.current) return
-      setLookUpDisabled(true)
-      hingeLock.current = true
+      setIsTransitioning(true)
       setShowMenuLabel(false)
       setShowMenu(false)
 
-      // Step 2: Reverse hinge — surface rotates back to 90°, room back to -15° (simultaneous)
+      // Signal that the next onAnimationComplete fires zoom-out (not menu show)
+      lookUpPendingZoomOut.current = true
+
+      // Reverse fold: surface back to 90° (invisible), room back to -15°
+      // Room stays at LEAN_SCALE throughout — stageScope is not touched here.
+      // onAnimationComplete on surfaceScope will fire performZoomOut.
       await Promise.all([
-        animateSurface(
-          surfaceScope.current,
-          { rotateX: 90 },
-          { duration: HINGE_DURATION, ease: HINGE_EASE }
-        ),
-        animateRoom(
-          roomScope.current,
-          { rotateX: -15 },
-          { duration: HINGE_DURATION, ease: HINGE_EASE }
-        ),
+        animateSurface(surfaceScope.current, { rotateX: 90 },
+          { duration: HINGE_DURATION, ease: HINGE_EASE }),
+        animateRoom(roomScope.current, { rotateX: -15 },
+          { duration: HINGE_DURATION, ease: HINGE_EASE }),
       ])
-
-      // Step 3: Unmount surface, ensure room is visible
-      setShowSurface(false)
-
-      // Step 4: Instant-restore room's zoom + lean state (duration:0, under blur)
-      // Room is already at rotateX:-15 from the reverse above.
-      // stageScope needs to be at LEAN_SCALE / lean-y so the zoom-out starts correctly.
-      await animateStage(
-        stageScope.current,
-        {
-          scale:   LEAN_SCALE,
-          y:       sh * (ZOOM_Y_PCT + LEAN_Y_EXTRA),
-          rotateX: -15,
-        },
-        { duration: 0 }
-      )
-
-      // Step 5: Smooth zoom-out back to ZOOM_SCALE (barkeep framed), rotateX back to 0
-      await Promise.all([
-        animateStage(
-          stageScope.current,
-          { scale: ZOOM_SCALE, y: sh * ZOOM_Y_PCT, rotateX: 0 },
-          { duration: 0.5, ease: 'easeInOut' }
-        ),
-        animateRoom(
-          roomScope.current,
-          { rotateX: 0 },
-          { duration: 0.5, ease: 'easeInOut' }
-        ),
-      ])
-
-      // Step 6: Room fully restored — show dialogue, re-enable button
-      setIsTilted(false)
-      setShowDialogue(true)
-      setLookUpDisabled(false)
-      hingeLock.current = false
+      // performZoomOut is called by handleSurfaceSettled (onAnimationComplete)
       return
     }
 
-    // Zoomed → wide
+    // ── Zoomed: zoom back to wide ──
     if (isZoomed) {
+      setIsTransitioning(true)
       setShowDialogue(false)
-      await animateStage(
-        stageScope.current,
-        { scale: 1, y: 0, rotateX: 0 },
-        { duration: 0.5, ease: 'easeInOut' }
-      )
+      await animateStage(stageScope.current, { scale: 1, y: 0, rotateX: 0 },
+        { duration: 0.5, ease: 'easeInOut' })
       setIsZoomed(false)
+      setIsTransitioning(false)
       return
     }
 
-    // Wide → exit to town
-    await animateOverlay(
-      overlayScope.current,
-      { opacity: 1 },
-      { duration: FADE_OUT_DURATION, ease: 'easeIn' }
-    )
+    // ── Wide: exit to town ──
+    await animateOverlay(overlayScope.current, { opacity: 1 },
+      { duration: FADE_OUT_DURATION, ease: 'easeIn' })
     navigate('/', { state: { fromBuilding: buildingId ?? fromBuilding } })
-  }
+  }, [
+    isTransitioning, isTilted, isZoomed,
+    animateSurface, surfaceScope,
+    animateRoom, roomScope,
+    animateStage, stageScope,
+    animateOverlay, overlayScope,
+    navigate, buildingId, fromBuilding, sh,
+  ])
 
   const Interior = buildingId ? INTERIOR_MAP[buildingId] : null
   const interiorProps: Record<string, unknown> = {}
@@ -289,7 +273,7 @@ export function BuildingInteriorPage() {
         color:      '#f0efe9',
       }}
     >
-      {/* ── Zoom stage — scale + y translate for approach ── */}
+      {/* ── Zoom stage + perspective container ── */}
       <motion.div
         ref={stageScope}
         initial={{ scale: 1.05 }}
@@ -297,19 +281,18 @@ export function BuildingInteriorPage() {
           position:        'absolute',
           inset:           0,
           transformOrigin: 'center 60%',
-          // perspective here so rotateX on this element has depth
           perspective:     PERSPECTIVE,
+          // perspective here gives depth to child rotateX values
         }}
       >
-        {/* ── 3D hinge scene — both panels live here ── */}
+        {/* ── 3D hinge scene — both panels share this preserve-3d context ── */}
         <div style={{
-          position:      'absolute',
-          inset:         0,
-          // preserve-3d so child rotateX values are in the same 3D space
+          position:       'absolute',
+          inset:          0,
           transformStyle: 'preserve-3d',
         }}>
 
-          {/* ── Room panel — exits rotateX(0) → rotateX(-90°), origin: bottom ── */}
+          {/* ── Room panel — exits rotateX(0°) → rotateX(-90°), origin: bottom ── */}
           <motion.div
             ref={roomScope}
             initial={{ rotateX: 0 }}
@@ -346,7 +329,8 @@ export function BuildingInteriorPage() {
             )}
           </motion.div>
 
-          {/* ── Surface panel — enters rotateX(90°) → rotateX(0), origin: top ── */}
+          {/* ── Surface panel — enters rotateX(90°) → rotateX(0°), origin: top ── */}
+          {/* Stays mounted through entire Look Up sequence until zoom-out completes */}
           {showSurface && (
             <motion.div
               ref={surfaceScope}
@@ -435,7 +419,7 @@ export function BuildingInteriorPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Menu book — scale 0.8→1.0 after surface spring fully settles ── */}
+      {/* ── Menu book — appears only after surface spring fully settles ── */}
       <AnimatePresence>
         {showMenu && (
           <motion.div
@@ -494,7 +478,7 @@ export function BuildingInteriorPage() {
         animate={{ opacity: 1 }}
         transition={{ duration: 0.4, delay: FADE_IN_DURATION + 0.35 }}
         onClick={handleExit}
-        disabled={lookUpDisabled}
+        disabled={isTransitioning}
         style={{
           position:      'absolute',
           bottom:        sh * 0.04,
@@ -509,15 +493,15 @@ export function BuildingInteriorPage() {
           letterSpacing: '0.2em',
           textTransform: 'uppercase',
           padding:       '8px 20px',
-          cursor:        lookUpDisabled ? 'default' : 'pointer',
-          opacity:       lookUpDisabled ? 0.4 : 1,
+          cursor:        isTransitioning ? 'default' : 'pointer',
+          opacity:       isTransitioning ? 0.4 : 1,
           transition:    'border-color 1.5s, color 1.5s, opacity 0.2s',
         }}
       >
         {isTilted ? '↑ Look Up' : isZoomed ? '← Back' : '← Exit'}
       </motion.button>
 
-      {/* ── Black overlay ── */}
+      {/* ── Black overlay (entry/exit fade) ── */}
       <motion.div
         ref={overlayScope}
         style={{
@@ -533,25 +517,25 @@ export function BuildingInteriorPage() {
   )
 }
 
-// ─── Bar Surface — tabletop SVG viewBox 0 0 1000 600 ─────────────────────────
+// ─── Bar Surface ─────────────────────────────────────────────────────────────
 //
-// Dark mahogany base. 6 horizontal planks with 1px gaps. 3 wear ellipses.
-// A centred <g id="menu-anchor"> marks where ZackMenu renders over it.
+// Top-down orthographic tabletop. viewBox="0 0 1000 600".
+// 6 mahogany planks with 1px dark gaps. Lamp cone from top-centre.
+// Edge vignette draws eye to centre. Glass ring stains. <g id="menu-anchor">.
 
 function BarSurface({ isNight }: { isNight: boolean }) {
-  const MAHOGANY     = isNight ? '#1e0905' : '#5C3317'
-  const PLANK_DARK   = isNight ? '#180704' : '#52291A'
-  const PLANK_LIGHT  = isNight ? '#221007' : '#6B3D26'
-  const GRAIN        = isNight ? 'rgba(201,169,110,0.055)' : 'rgba(78,52,46,0.07)'
-  const GRAIN_HEAVY  = isNight ? 'rgba(201,169,110,0.09)'  : 'rgba(78,52,46,0.11)'
-  const PLANK_GAP    = isNight ? '#0a0402' : '#2a1208'
-  const WEAR         = isNight ? 'rgba(201,169,110,0.03)'  : 'rgba(78,52,46,0.05)'
-  const LAMP_GLOW    = isNight ? 'rgba(255,172,0,0.16)'    : 'rgba(255,248,200,0.22)'
-  const VIGNETTE     = isNight ? 'rgba(0,0,0,0.55)'        : 'rgba(0,0,0,0.22)'
-  const RING         = isNight ? 'rgba(201,169,110,0.07)'  : 'rgba(78,52,46,0.09)'
+  const MAHOGANY    = isNight ? '#1e0905' : '#5C3317'
+  const PLANK_DARK  = isNight ? '#180704' : '#52291A'
+  const PLANK_LIGHT = isNight ? '#221007' : '#6B3D26'
+  const GRAIN       = isNight ? 'rgba(201,169,110,0.055)' : 'rgba(78,52,46,0.07)'
+  const GRAIN_HEAVY = isNight ? 'rgba(201,169,110,0.09)'  : 'rgba(78,52,46,0.11)'
+  const PLANK_GAP   = isNight ? '#0a0402' : '#2a1208'
+  const WEAR        = isNight ? 'rgba(201,169,110,0.03)'  : 'rgba(78,52,46,0.05)'
+  const LAMP_GLOW   = isNight ? 'rgba(255,172,0,0.16)'    : 'rgba(255,248,200,0.22)'
+  const VIGNETTE    = isNight ? 'rgba(0,0,0,0.55)'        : 'rgba(0,0,0,0.22)'
+  const RING        = isNight ? 'rgba(201,169,110,0.07)'  : 'rgba(78,52,46,0.09)'
 
-  // Plank heights — 6 planks filling 600px, with 1px gaps between
-  const PLANK_H = 98   // (600 - 5 gaps) / 6 ≈ 99, use 98 to leave gap room
+  const PLANK_H = 98
   const planks  = [0, 100, 200, 300, 400, 500]
 
   return (
@@ -569,36 +553,30 @@ function BarSurface({ isNight }: { isNight: boolean }) {
         fill="none"
       >
         <defs>
-          {/* Lamp cone — radial from top-centre */}
           <radialGradient id="bs-lamp" cx="50%" cy="8%" r="70%" fx="50%" fy="8%">
             <stop offset="0%"   stopColor={LAMP_GLOW} />
             <stop offset="100%" stopColor="transparent" />
           </radialGradient>
-          {/* Edge vignette */}
           <radialGradient id="bs-vignette" cx="50%" cy="50%" r="60%">
             <stop offset="30%"  stopColor="transparent" />
             <stop offset="100%" stopColor={VIGNETTE} />
           </radialGradient>
         </defs>
 
-        {/* ── 6 horizontal planks ── */}
+        {/* ── 6 horizontal mahogany planks ── */}
         {planks.map((py, i) => {
           const fill = i % 2 === 0 ? PLANK_DARK : PLANK_LIGHT
           return (
             <g key={i}>
-              {/* Plank body */}
               <rect x="0" y={py} width="1000" height={PLANK_H} fill={fill} />
-
-              {/* 1px gap between planks */}
               {i < planks.length - 1 && (
                 <line
-                  x1="0" y1={py + PLANK_H}
+                  x1="0"    y1={py + PLANK_H}
                   x2="1000" y2={py + PLANK_H}
                   stroke={PLANK_GAP} strokeWidth="2"
                 />
               )}
-
-              {/* Grain lines — 4 per plank, varying x-start and width */}
+              {/* 4 grain lines per plank — deterministic to avoid re-render flicker */}
               {[16, 34, 58, 80].map((offset, j) => {
                 const gy    = py + offset
                 const gx1   = ((i * 79 + j * 131) % 160)
@@ -607,7 +585,7 @@ function BarSurface({ isNight }: { isNight: boolean }) {
                 return (
                   <line key={j}
                     x1={gx1} y1={gy}
-                    x2={gx2}   y2={gy}
+                    x2={gx2} y2={gy}
                     stroke={heavy ? GRAIN_HEAVY : GRAIN}
                     strokeWidth={heavy ? 1.2 : 0.7}
                   />
@@ -620,10 +598,10 @@ function BarSurface({ isNight }: { isNight: boolean }) {
         {/* ── Lamp light cone ── */}
         <rect x="0" y="0" width="1000" height="600" fill="url(#bs-lamp)" />
 
-        {/* ── Edge vignette ── */}
+        {/* ── Edge vignette — focus eye on centre ── */}
         <rect x="0" y="0" width="1000" height="600" fill="url(#bs-vignette)" />
 
-        {/* ── Wear marks — 3 elongated ellipses (glass ring paths) ── */}
+        {/* ── Glass ring stains (old dried rings) ── */}
         <ellipse cx="680" cy="430" rx="38" ry="12"
           fill={WEAR} stroke={RING} strokeWidth="0.8"
           transform="rotate(-8 680 430)"
@@ -636,8 +614,6 @@ function BarSurface({ isNight }: { isNight: boolean }) {
           fill={WEAR} stroke={RING} strokeWidth="0.6"
           transform="rotate(-3 820 140)"
         />
-
-        {/* ── Glass ring stains (old dried rings) ── */}
         <circle cx="720" cy="390" r="22"
           fill="none" stroke={RING} strokeWidth="1"
         />
@@ -645,26 +621,24 @@ function BarSurface({ isNight }: { isNight: boolean }) {
           fill="none" stroke={RING} strokeWidth="0.8"
         />
 
-        {/* ── Menu book drop shadow (pre-rendered under ZackMenu overlay) ── */}
+        {/* ── Menu book drop shadow (underneath ZackMenu overlay) ── */}
         <rect x="310" y="195" width="380" height="240" rx="6"
           fill={isNight ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.22)'}
           style={{ filter: 'blur(20px)' }}
         />
 
-        {/* ── Menu anchor — centre marker ── */}
-        <g id="menu-anchor" transform="translate(500, 300)">
-          {/* Invisible reference point — ZackMenu overlays this */}
-        </g>
+        {/* ── Menu anchor — centre reference point ── */}
+        <g id="menu-anchor" transform="translate(500, 300)" />
       </svg>
     </div>
   )
 }
 
-// ─── ZackMenu — 3-page spread hardcoded SVG ──────────────────────────────────
+// ─── ZackMenu — 3-page SVG spread ────────────────────────────────────────────
 //
-// Page 1 (left):  "Zack's Specials" — Water Polo / Academic All-American
-// Page 2 (right top): "The Startup" — Terrapin Rewards
-// Page 3 (right bottom): "The Vision" — UI/UX Software Engineering
+// Page 1 (left):  The Athlete — Water Polo / Academic All-American
+// Page 2 (right-top):    The Startup — Terrapin Rewards
+// Page 3 (right-bottom): The Vision  — UI/UX Software Engineering
 
 function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: number }) {
   const bookW = Math.min(sw * 0.58, 440)
@@ -674,7 +648,6 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
     ? {
         cover:       '#1e0e04',
         page:        'rgba(201,169,110,0.10)',
-        pageLine:    'rgba(201,169,110,0.18)',
         spine:       '#c9a96e',
         title:       '#c9a96e',
         body:        'rgba(201,169,110,0.55)',
@@ -686,7 +659,6 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
     : {
         cover:       '#5D4037',
         page:        'rgba(255,249,224,0.78)',
-        pageLine:    'rgba(78,52,46,0.14)',
         spine:       '#4E342E',
         title:       '#4E342E',
         body:        'rgba(78,52,46,0.6)',
@@ -721,7 +693,7 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
       {/* Right page */}
       <rect x="234" y="12" width="214" height="308" rx="2" fill={c.page} />
 
-      {/* Spine */}
+      {/* Spine line */}
       <line x1="230" y1="8" x2="230" y2="324"
         stroke={c.spine} strokeWidth="1.5" strokeOpacity="0.4"
       />
@@ -740,7 +712,7 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
       <rect x="212" y="12" width="18" height="308" fill="url(#zk-curl-l)" />
       <rect x="230" y="12" width="18" height="308" fill="url(#zk-curl-r)" />
 
-      {/* ══ PAGE 1 — ZACK'S SPECIALS ══ */}
+      {/* ══ PAGE 1 — THE ATHLETE ══ */}
       <rect x="24" y="20" width="190" height="26" rx="1" fill={c.titleBg} />
       <text x="119" y="38" textAnchor="middle"
         fill={c.title} fontFamily={F} fontSize="9"
@@ -756,15 +728,15 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
         fontSize="6.5" letterSpacing="0.06em" opacity="0.8"
       >CAREER STATS</text>
 
-      {[
+      {([
         [98,  '4-Year Starter, Goalkeeper'],
-        [112, 'Academic All-American'],
+        [112, '4× Academic All-American'],
         [126, 'Conference Champion'],
         [140, 'Captain, Senior Year'],
-      ].map(([y, line]) => (
-        <text key={y as number} x="28" y={y as number}
+      ] as [number, string][]).map(([y, line]) => (
+        <text key={y} x="28" y={y}
           fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line as string}</text>
+        >{line}</text>
       ))}
 
       <line x1="24" y1="152" x2="140" y2="152" stroke={c.separator} strokeWidth="0.6" />
@@ -773,15 +745,15 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
         fontSize="6.5" letterSpacing="0.06em" opacity="0.8"
       >TRAITS FORGED</text>
 
-      {[
+      {([
         [182, 'Discipline under pressure'],
         [196, 'Team-first mentality'],
         [210, 'Relentless work ethic'],
         [224, 'Leadership by example'],
-      ].map(([y, line]) => (
-        <text key={y as number} x="28" y={y as number}
+      ] as [number, string][]).map(([y, line]) => (
+        <text key={y} x="28" y={y}
           fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line as string}</text>
+        >{line}</text>
       ))}
 
       <line x1="24" y1="236" x2="140" y2="236" stroke={c.separator} strokeWidth="0.6" />
@@ -805,7 +777,7 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
       >Terrapin Rewards · 1 of 2 Employees</text>
       <line x1="246" y1="52" x2="432" y2="52" stroke={c.separator} strokeWidth="0.6" />
 
-      {[
+      {([
         [66,  'Built the entire product from zero:'],
         [80,  'UI/UX design, front-end, branding.'],
         [98,  'Pitched to investors. Won funding.'],
@@ -814,10 +786,10 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
         [144, 'Learned that wearing every hat'],
         [158, 'makes you a better designer —'],
         [172, 'you understand constraints deeply.'],
-      ].map(([y, line]) => (
-        <text key={y as number} x="250" y={y as number}
+      ] as [number, string][]).map(([y, line]) => (
+        <text key={y} x="250" y={y}
           fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line as string}</text>
+        >{line}</text>
       ))}
 
       <line x1="246" y1="186" x2="360" y2="186" stroke={c.separator} strokeWidth="0.6" />
@@ -831,23 +803,23 @@ function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: numbe
       >UI/UX · Software Engineering</text>
       <line x1="246" y1="226" x2="432" y2="226" stroke={c.separator} strokeWidth="0.6" />
 
-      {[
+      {([
         [240, 'Design systems that scale.'],
         [254, 'Interfaces that feel alive.'],
         [268, 'Code that respects the craft.'],
         [286, 'Looking for a team that ships'],
         [300, 'beautiful, purposeful software.'],
-      ].map(([y, line]) => (
-        <text key={y as number} x="250" y={y as number}
+      ] as [number, string][]).map(([y, line]) => (
+        <text key={y} x="250" y={y}
           fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line as string}</text>
+        >{line}</text>
       ))}
 
       {/* Corner ornaments */}
-      {[
+      {([
         [16, 16], [220, 16], [16, 316], [220, 316],
         [238, 16], [440, 16], [238, 316], [440, 316],
-      ].map(([ox, oy]) => (
+      ] as [number, number][]).map(([ox, oy]) => (
         <circle key={`${ox}-${oy}`} cx={ox} cy={oy} r="2"
           fill="none" stroke={c.spine}
           strokeWidth="0.5" strokeOpacity="0.25"
