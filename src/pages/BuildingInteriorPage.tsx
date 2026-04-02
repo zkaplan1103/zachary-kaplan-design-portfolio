@@ -999,10 +999,6 @@ function BarSurface({
                   padding: 25,
                   boxSizing: 'border-box',
                   zIndex: 1,
-                  transform: 'translateZ(-5px)',
-                  display: 'block',
-                  opacity: 1,
-                  border: '2px solid blue',
                 }}
               >
                 {careerContent}
@@ -1020,7 +1016,7 @@ function BarSurface({
                   transitionProperty: 'transform',
                   transitionDuration: '0.8s',
                   transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
-                  transform: 'rotateY(' + (activePage === 0 ? 0 : -180) + 'deg) translateZ(0px)',
+                  transform: 'rotateY(' + (activePage === 0 ? 0 : -180) + 'deg)',
                   transformStyle: 'preserve-3d',
                   zIndex: 10,
                   pointerEvents: 'none',
@@ -1043,20 +1039,6 @@ function BarSurface({
                 >
                   {athleteContent}
                 </div>
-
-                {/* BACK - blank */}
-                <div
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    width: '100%',
-                    height: '100%',
-                    background: PAGE_BG,
-                    backfaceVisibility: 'hidden',
-                    transform: 'rotateY(180deg)',
-                  }}
-                />
               </div>
 
               {/* SPINE */}
@@ -1084,7 +1066,6 @@ function BarSurface({
                   zIndex: 999,
                   cursor: 'pointer',
                   pointerEvents: 'auto',
-                  background: 'rgba(255, 0, 0, 0.2)',
                 }}
                 onClick={() => onPageChange?.(0)}
               />
@@ -1098,7 +1079,6 @@ function BarSurface({
                   zIndex: 999,
                   cursor: 'pointer',
                   pointerEvents: 'auto',
-                  background: 'rgba(0, 255, 0, 0.2)',
                 }}
                 onClick={() => onPageChange?.(1)}
               />
