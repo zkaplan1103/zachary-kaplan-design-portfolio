@@ -44,6 +44,16 @@ The internal screen of the BezelContainer is a hard boundary. Any UI element (te
 
 ---
 
+## 3D Hinge Coordinate System (Saloon Interior)
+CSS `rotateX` with `perspective: 1200px` on the parent:
+- **Wall panel** (`transform-origin: center bottom`): `rotateX(-90)` = top swings AWAY from user (look-down). `rotateX(+90)` = top swings TOWARD user (look-up). Use **negative** for "look down at bar."
+- **Surface panel** (`transform-origin: center top`): starts at `rotateX(90)` (edge-on). Animates to `0` (flat).
+- **NEVER run hinge rotation and zoom simultaneously.** Simultaneous zoom-out reveals the ceiling → reads as "looking up." Hinge always runs at 6.8× zoom. Zoom changes are separate sequential phases.
+- **Ghost table fix:** Set `roomHidden = true` (opacity:0) on the room panel immediately after the hinge reaches -90, before zoom-out begins. Restore before reverse hinge.
+- Hook: `src/hooks/useHingeTransition.ts` — encapsulates the physics. Component manages UI state.
+
+---
+
 ## Scope Protection
 **Never modify** unless the task explicitly targets them:
 `CRTScreen.tsx` · `main.tsx` · `index.css` · `RootLayout.tsx` · `router.tsx`

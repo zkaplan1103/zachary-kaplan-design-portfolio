@@ -1,109 +1,136 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
-import { motion, useAnimate, useSpring, AnimatePresence } from 'framer-motion'
+import {
+  motion,
+  useAnimate,
+  useSpring,
+  useMotionValue,
+  animate,
+  AnimatePresence,
+} from 'framer-motion'
 import { useBezelContext } from '@/contexts/BezelContext'
 import { useUIStore } from '@/store/uiStore'
 import { BUILDING_DIALOGUES } from '@/components/PokemonTextBox'
-import { SaloonInterior }  from '@/components/interiors/SaloonInterior'
+import { SaloonInterior } from '@/components/interiors/SaloonInterior'
 import { SheriffInterior } from '@/components/interiors/SheriffInterior'
-import { BankInterior }    from '@/components/interiors/BankInterior'
+import { BankInterior } from '@/components/interiors/BankInterior'
 import type { InteriorProps } from '@/components/interiors/interiorTypes'
 
 // ─── Interior map ─────────────────────────────────────────────────────────────
 const INTERIOR_MAP: Record<string, React.ComponentType<InteriorProps>> = {
-  saloon:  SaloonInterior,
+  saloon: SaloonInterior,
   sheriff: SheriffInterior,
-  bank:    BankInterior,
+  bank: BankInterior,
 }
 
 // ─── Spring config ────────────────────────────────────────────────────────────
 const SPRING_CONFIG = { stiffness: 50, damping: 20 }
 
 // ─── Fade timings ─────────────────────────────────────────────────────────────
-const FADE_IN_DURATION  = 0.4
+const FADE_IN_DURATION = 0.4
 const FADE_OUT_DURATION = 0.25
 
-// ─── Zoom-to-seat ─────────────────────────────────────────────────────────────
-const ZOOM_SCALE    = 2.8
-const ZOOM_DURATION = 0.8
-const ZOOM_Y_PCT    = 0.18
+// ─── Deep Lean zoom-to-seat ─────────────────────────────────────────────────
+// SVG-coordinate anchor approach: no DOM measurements.
+//
+// Source of Truth: Barkeep SVG group at translate(500, 170).
+// Head center in SVG coords: y = 170 (group y) + 15 (head cy) = 185.
+// Hat top in SVG coords: y = 170 + 8 (hat brim) = 178.
+//
+// transform-origin: center 178px — anchored on HAT TOP (not center of head).
+// This keeps hat near top of viewport when scaled.
+// Scale: 6.8× zooms downward from hat.
+// TranslateY: -480px pulls torso/apron into center of frame (10-15% increase).
+const SEATED_SCALE = 6.8
+const SEATED_Y_OFFSET = -480 // fixed px — pulls torso/apron into center
+const ZOOM_DURATION = 1.0
 
-// ─── 3D Hinge geometry ───────────────────────────────────────────────────────
+// ─── 3D Hinge coordinate system ─────────────────────────────────────────────
 //
-// Perspective: 1200px on the hinge wrapper — prevents transparency artefacts.
+// Perspective: 1200px on stageScope (parent of hinge container).
+// Both panels always in DOM. Surface starts at rotateX(90) — edge-on, invisible.
 //
-// L-shape fold:
-//   Interior exits:  rotateX(0°) → rotateX(-90°), origin = center bottom
-//   Surface enters:  rotateX(90°) → rotateX(0°),  origin = center top
+// Wall panel:    transform-origin: center bottom (bottom edge = hinge line)
+//   rotateX(-90) → top swings AWAY from user. Barkeep recedes, surface appears.
 //
-// Both panels STAY MOUNTED during the full transition (including Look Up).
-// Surface only unmounts after the zoom-out completes.
+// Surface panel: transform-origin: center top   (top edge = hinge line)
+//   rotateX(90→0) → bar surface rotates up into view from below.
 //
-// Look Up sequence:
-//   1. isTransitioning = true (single guard, blocks all input)
-//   2. Reverse fold simultaneously (both 400ms circOut)
-//   3. Surface is still mounted but edge-on (rotateX:90) — invisible, safe
-//   4. onAnimationComplete fires → zoom-out 4.5× → 1×
-//   5. setShowSurface(false) + reset state
+// CRITICAL SEQUENCING: Hinge and zoom are NEVER simultaneous.
+//   Simultaneous zoom-out reveals the ceiling lights → reads as "looking up."
+//   The hinge always runs at 6.8× so only the barkeep area is visible.
 //
-const PERSPECTIVE     = 1200
-const LEAN_SCALE      = 4.5
-const LEAN_DURATION   = 0.3
-const LEAN_Y_EXTRA    = 0.08
-const HINGE_DURATION  = 0.4
-// circOut: fast-in, asymptotic settle — feels weighted/physical
-const HINGE_EASE      = [0.0, 0.0, 0.2, 1.0] as const   // approx circOut
-const ZOOM_OUT_EASE   = [0.4, 0, 0.6, 1] as const
+// Look Down (Continue) — 3 sequential phases:
+//   1. Hinge at 6.8× (1.6s): Wall -90, Surface 0. Ceiling off-screen.
+//   2. Hide room (instant): opacity:0 on room panel. Prevents ghost artifacts.
+//   3. Zoom out (0.8s): 6.8→1.0. Reveals full bar surface. Book slides in.
+//
+// Look Up — 3 sequential phases:
+//   1. Zoom in (0.8s): 1.0→6.8. Crops to barkeep area, hides ceiling.
+//   2. Show room (instant): opacity:1 on room panel before reverse hinge.
+//   3. Reverse hinge at 6.8× (1.6s): Wall 0, Surface 90.
+//   Result: 6.8× on barkeep. No ceiling visible at any point.
+//
+const PERSPECTIVE = 1200
 
-// ─── Component ───────────────────────────────────────────────────────────────
+// ─── Centralized transition settings ────────────────────────────────────────
+const TRANSITION_SETTINGS = {
+  hingeDuration: 1.6, // 1600ms — "heavy head"
+  hingeEase: [0.45, 0, 0.55, 1] as const, // Slow-In, Slow-Out
+  zoomRevealDur: 0.8, // 800ms zoom out/in (after/before hinge)
+  menuSlideDur: 0.8, // 800ms book slide-in CSS transition
+  zoomOutEase: [0.4, 0, 0.2, 1] as const, // Back button: zoomed→wide
+} as const
+
+// ─── Component ──────────────────────────────────────────────────────────────
 
 export function BuildingInteriorPage() {
   const { buildingId } = useParams<{ buildingId: string }>()
-  const navigate  = useNavigate()
-  const location  = useLocation()
+  const navigate = useNavigate()
+  const location = useLocation()
 
-  const b  = useBezelContext()
+  const b = useBezelContext()
   const sw = b.width
   const sh = b.height
 
   const isNight = useUIStore((s) => s.isNight)
 
   const [overlayScope, animateOverlay] = useAnimate()
-  const [stageScope,   animateStage]   = useAnimate()  // zoom + lean — stageScope IS the perspective container
-  const [roomScope,    animateRoom]    = useAnimate()  // room rotateX
-  const [surfaceScope, animateSurface] = useAnimate()  // surface rotateX
+  const [stageScope, animateStage] = useAnimate()
+  const [roomScope, animateRoom] = useAnimate()
+  const [surfaceScope, animateSurface] = useAnimate()
 
   const hasFadedIn = useRef(false)
 
   const stageRef = useRef<HTMLDivElement>(null)
   const [mouseNorm, setMouseNorm] = useState(0)
   const mouseSpring = useSpring(mouseNorm, SPRING_CONFIG)
+  // 0 = wide view, 1 = fully zoomed to barkeep. Drives parallax in SaloonInterior.
+  const zoomProgress = useMotionValue(0)
 
-  // ── Single isTransitioning guard — blocks all input mid-animation ──
   const [isTransitioning, setIsTransitioning] = useState(false)
 
-  // ── State machine: wide → zoomed → tilted ──
-  const [isZoomed,     setIsZoomed]     = useState(false)
-  const [isTilted,     setIsTilted]     = useState(false)
+  // State machine: wide → zoomed → tilted
+  const [isZoomed, setIsZoomed] = useState(false)
+  const [isTilted, setIsTilted] = useState(false)
   const [showDialogue, setShowDialogue] = useState(false)
-  const [showSurface,  setShowSurface]  = useState(false)
-  const [showMenu,     setShowMenu]     = useState(false)
+  const [showMenu, setShowMenu] = useState(false)
   const [showMenuLabel, setShowMenuLabel] = useState(false)
+  const [roomHidden, setRoomHidden] = useState(false) // ghost-table fix
 
-  // Tracks that we're in the Look Up reverse — used to gate zoom-out
-  // after the hinge rotation's onAnimationComplete fires
-  const lookUpPendingZoomOut = useRef(false)
+  const onMouseMove = useCallback(
+    (e: React.MouseEvent) => {
+      if (isZoomed || isTilted) return
+      const rect = stageRef.current?.getBoundingClientRect()
+      if (!rect) return
+      const norm = ((e.clientX - rect.left) / rect.width - 0.5) * 2
+      setMouseNorm(norm)
+      mouseSpring.set(norm)
+    },
+    [mouseSpring, isZoomed, isTilted]
+  )
 
-  const onMouseMove = useCallback((e: React.MouseEvent) => {
-    if (isZoomed || isTilted) return
-    const rect = stageRef.current?.getBoundingClientRect()
-    if (!rect) return
-    const norm = ((e.clientX - rect.left) / rect.width - 0.5) * 2
-    setMouseNorm(norm)
-    mouseSpring.set(norm)
-  }, [mouseSpring, isZoomed, isTilted])
-
-  const dialogue     = buildingId ? BUILDING_DIALOGUES[buildingId] : null
+  const dialogue = buildingId ? BUILDING_DIALOGUES[buildingId] : null
   const fromBuilding = (location.state as { fromBuilding?: string } | null)?.fromBuilding
 
   // ── Entry fade ──
@@ -113,145 +140,166 @@ export function BuildingInteriorPage() {
     requestAnimationFrame(() =>
       requestAnimationFrame(async () => {
         await Promise.all([
-          animateOverlay(overlayScope.current, { opacity: 0 },
-            { duration: FADE_IN_DURATION, ease: 'easeOut' }),
-          animateStage(stageScope.current, { scale: 1 },
-            { duration: 0.6, ease: [0.2, 0, 0.4, 1] }),
+          animateOverlay(
+            overlayScope.current,
+            { opacity: 0 },
+            { duration: FADE_IN_DURATION, ease: 'easeOut' }
+          ),
+          animateStage(stageScope.current, { scale: 1 }, { duration: 0.6, ease: [0.2, 0, 0.4, 1] }),
         ])
       })
     )
   }, [animateOverlay, overlayScope, animateStage, stageScope])
 
-  // ── Barkeep click → zoom-to-seat ──
+  // ── Barkeep click → Deep Lean zoom ──
+  // zoomProgress 0→1 runs in parallel — drives per-layer parallax in SaloonInterior.
   const handleBarkeepClick = useCallback(async () => {
     if (isZoomed || isTransitioning) return
     setIsTransitioning(true)
     setIsZoomed(true)
     mouseSpring.jump(mouseSpring.get())
 
-    await animateStage(stageScope.current,
-      { scale: ZOOM_SCALE, y: sh * ZOOM_Y_PCT },
-      { duration: ZOOM_DURATION, ease: 'easeOut' }
-    )
+    await Promise.all([
+      animateStage(
+        stageScope.current,
+        { scale: SEATED_SCALE, y: SEATED_Y_OFFSET },
+        { duration: ZOOM_DURATION, ease: 'easeOut' }
+      ),
+      animate(zoomProgress, 1, { duration: ZOOM_DURATION, ease: 'easeOut' }),
+    ])
     setShowDialogue(true)
     setIsTransitioning(false)
-  }, [isZoomed, isTransitioning, mouseSpring, animateStage, stageScope, sh])
+  }, [isZoomed, isTransitioning, mouseSpring, animateStage, stageScope, sh, zoomProgress])
 
-  // ── Continue → 3D Hinge "Look Down" ──
+  // ── Continue → "Heavy Head" Hinge (Look Down) ──
   const handleContinue = useCallback(async () => {
     if (isTilted || isTransitioning) return
     setIsTransitioning(true)
     setShowDialogue(false)
     setIsTilted(true)
 
-    // Phase 1: Lean in — punch to 4.5× while room pitches -15°
-    await animateStage(stageScope.current,
-      { scale: LEAN_SCALE, y: sh * (ZOOM_Y_PCT + LEAN_Y_EXTRA), rotateX: -15 },
-      { duration: LEAN_DURATION, ease: [0.4, 0, 0.7, 1] }
+    // Phase 1: Hinge at 6.8× — ceiling stays off-screen.
+    // Wall: 0 → -90 (top swings away from user). Surface: 90 → 0 (rises into view).
+    await Promise.all([
+      animateRoom(
+        roomScope.current,
+        { rotateX: -90 },
+        { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+      ),
+      animateSurface(
+        surfaceScope.current,
+        { rotateX: 0 },
+        { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+      ),
+    ])
+
+    // Phase 2: Hide room panel to prevent ghost artifacts during zoom-out.
+    setRoomHidden(true)
+
+    // Phase 3: Zoom out to reveal full bar surface (10.0→1.0).
+    await animateStage(
+      stageScope.current,
+      { scale: 1, y: 0 },
+      { duration: TRANSITION_SETTINGS.zoomRevealDur, ease: TRANSITION_SETTINGS.hingeEase }
     )
 
-    // Mount surface (starts at rotateX:90 via initial — edge-on, invisible)
-    setShowSurface(true)
-    await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
-
-    // Phase 2: Simultaneous hinge fold — circOut on both panels
-    await Promise.all([
-      animateRoom(roomScope.current, { rotateX: -90 },
-        { duration: HINGE_DURATION, ease: HINGE_EASE }),
-      animateSurface(surfaceScope.current, { rotateX: 0 },
-        { duration: HINGE_DURATION, ease: HINGE_EASE }),
-    ])
-
-    setIsTransitioning(false)
-    // Menu appears via handleSurfaceSettled (onAnimationComplete on surfaceScope)
-  }, [
-    isTilted, isTransitioning,
-    animateStage, stageScope,
-    animateRoom, roomScope,
-    animateSurface, surfaceScope, sh,
-  ])
-
-  // Called when the surface animation fully completes (fold-down)
-  const handleSurfaceSettled = useCallback(() => {
-    // If we're doing a Look Up reverse, fire the zoom-out instead of showing menu
-    if (lookUpPendingZoomOut.current) {
-      lookUpPendingZoomOut.current = false
-      void performZoomOut()
-      return
-    }
+    // Phase 4: Book slides in only AFTER hinge + zoom complete.
     setShowMenu(true)
     setTimeout(() => setShowMenuLabel(true), 300)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Zoom-out step, extracted so it can be called from handleSurfaceSettled
-  const performZoomOut = useCallback(async () => {
-    // Room scale is already at LEAN_SCALE from the tilt phase.
-    // Animate back to ZOOM_SCALE (barkeep framed), rotateX back to 0.
-    await Promise.all([
-      animateStage(stageScope.current,
-        { scale: ZOOM_SCALE, y: sh * ZOOM_Y_PCT, rotateX: 0 },
-        { duration: 0.5, ease: ZOOM_OUT_EASE }
-      ),
-      animateRoom(roomScope.current, { rotateX: 0 },
-        { duration: 0.5, ease: ZOOM_OUT_EASE }
-      ),
-    ])
-
-    // Surface is now edge-on and invisible — safe to unmount
-    setShowSurface(false)
-    setIsTilted(false)
-    setShowDialogue(true)
     setIsTransitioning(false)
-  }, [animateStage, stageScope, animateRoom, roomScope, sh])
+  }, [
+    isTilted,
+    isTransitioning,
+    animateRoom,
+    roomScope,
+    animateSurface,
+    surfaceScope,
+    animateStage,
+    stageScope,
+  ])
 
-  // ── "Look Up" — reverse hinge ──
+  // ── Exit: Look Up / Back / Exit ──
   const handleExit = useCallback(async () => {
     if (isTransitioning) return
 
-    // ── Tilted: reverse the hinge, then zoom out ──
+    // ── Tilted → Barkeep (Look Up) ──
     if (isTilted) {
       setIsTransitioning(true)
       setShowMenuLabel(false)
       setShowMenu(false)
 
-      // Signal that the next onAnimationComplete fires zoom-out (not menu show)
-      lookUpPendingZoomOut.current = true
+      // Phase 1: Zoom in to barkeep depth (1.0→6.8). Ceiling exits visible area.
+      await animateStage(
+        stageScope.current,
+        { scale: SEATED_SCALE, y: SEATED_Y_OFFSET },
+        { duration: TRANSITION_SETTINGS.zoomRevealDur, ease: TRANSITION_SETTINGS.hingeEase }
+      )
 
-      // Reverse fold: surface back to 90° (invisible), room back to -15°
-      // Room stays at LEAN_SCALE throughout — stageScope is not touched here.
-      // onAnimationComplete on surfaceScope will fire performZoomOut.
+      // Phase 2: Restore room panel before reverse hinge.
+      setRoomHidden(false)
+
+      // Phase 3: Reverse hinge at 6.8× — ceiling stays off-screen.
+      // Wall: -90 → 0 (returns to vertical). Surface: 0 → 90 (drops away).
       await Promise.all([
-        animateSurface(surfaceScope.current, { rotateX: 90 },
-          { duration: HINGE_DURATION, ease: HINGE_EASE }),
-        animateRoom(roomScope.current, { rotateX: -15 },
-          { duration: HINGE_DURATION, ease: HINGE_EASE }),
+        animateRoom(
+          roomScope.current,
+          { rotateX: 0 },
+          { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+        ),
+        animateSurface(
+          surfaceScope.current,
+          { rotateX: 90 },
+          { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+        ),
       ])
-      // performZoomOut is called by handleSurfaceSettled (onAnimationComplete)
+
+      // Wall vertical. Scale is 6.8× — barkeep conversation depth. STOP.
+      setIsTilted(false)
+      setShowDialogue(true)
+      setIsTransitioning(false)
       return
     }
 
-    // ── Zoomed: zoom back to wide ──
+    // ── Zoomed → Wide: explicit "Back" from seated view ──
     if (isZoomed) {
       setIsTransitioning(true)
       setShowDialogue(false)
-      await animateStage(stageScope.current, { scale: 1, y: 0, rotateX: 0 },
-        { duration: 0.5, ease: 'easeInOut' })
+      await Promise.all([
+        animateStage(
+          stageScope.current,
+          { scale: 1, y: 0, rotateX: 0 },
+          { duration: 0.85, ease: TRANSITION_SETTINGS.zoomOutEase }
+        ),
+        animate(zoomProgress, 0, { duration: 0.85, ease: TRANSITION_SETTINGS.zoomOutEase }),
+      ])
       setIsZoomed(false)
       setIsTransitioning(false)
       return
     }
 
-    // ── Wide: exit to town ──
-    await animateOverlay(overlayScope.current, { opacity: 1 },
-      { duration: FADE_OUT_DURATION, ease: 'easeIn' })
+    // ── Wide → Town ──
+    await animateOverlay(
+      overlayScope.current,
+      { opacity: 1 },
+      { duration: FADE_OUT_DURATION, ease: 'easeIn' }
+    )
     navigate('/', { state: { fromBuilding: buildingId ?? fromBuilding } })
   }, [
-    isTransitioning, isTilted, isZoomed,
-    animateSurface, surfaceScope,
-    animateRoom, roomScope,
-    animateStage, stageScope,
-    animateOverlay, overlayScope,
-    navigate, buildingId, fromBuilding, sh,
+    isTransitioning,
+    isTilted,
+    isZoomed,
+    animateRoom,
+    roomScope,
+    animateSurface,
+    surfaceScope,
+    animateStage,
+    stageScope,
+    sh,
+    animateOverlay,
+    overlayScope,
+    navigate,
+    buildingId,
+    fromBuilding,
   ])
 
   const Interior = buildingId ? INTERIOR_MAP[buildingId] : null
@@ -265,63 +313,68 @@ export function BuildingInteriorPage() {
       ref={stageRef}
       onMouseMove={onMouseMove}
       style={{
-        position:   'absolute',
-        inset:      0,
-        zIndex:     400,
-        overflow:   'hidden',
+        position: 'absolute',
+        inset: 0,
+        zIndex: 400,
+        overflow: 'hidden',
         fontFamily: '"IBM Plex Mono", monospace',
-        color:      '#f0efe9',
+        color: '#f0efe9',
       }}
     >
-      {/* ── Zoom stage + perspective container ── */}
+      {/* ── Zoom stage + perspective ── */}
       <motion.div
         ref={stageScope}
         initial={{ scale: 1.05 }}
         style={{
-          position:        'absolute',
-          inset:           0,
-          transformOrigin: 'center 60%',
-          perspective:     PERSPECTIVE,
-          // perspective here gives depth to child rotateX values
+          position: 'absolute',
+          inset: 0,
+          // Anchored on hat top at y=178px (SVG coords: group y=170 + hat brim y=8).
+          // Hat stays near top of viewport, scale zooms downward, translateY pulls torso up.
+          transformOrigin: 'center 178px',
+          perspective: PERSPECTIVE,
         }}
       >
-        {/* ── 3D hinge scene — both panels share this preserve-3d context ── */}
-        <div style={{
-          position:       'absolute',
-          inset:          0,
-          transformStyle: 'preserve-3d',
-        }}>
-
-          {/* ── Room panel — exits rotateX(0°) → rotateX(-90°), origin: bottom ── */}
+        {/* ── 3D hinge container ── */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            transformStyle: 'preserve-3d',
+          }}
+        >
+          {/* ── Room (The Wall) — always mounted, hidden when tilted to prevent ghost ── */}
           <motion.div
             ref={roomScope}
             initial={{ rotateX: 0 }}
             style={{
-              position:           'absolute',
-              inset:              0,
-              transformOrigin:    'center bottom',
-              transformStyle:     'preserve-3d',
+              position: 'absolute',
+              inset: 0,
+              transformOrigin: 'center bottom',
               backfaceVisibility: 'hidden',
+              opacity: roomHidden ? 0 : 1,
             }}
           >
             {Interior ? (
               <Interior
                 isNight={isNight}
                 mouseSpring={mouseSpring}
+                zoomProgress={zoomProgress}
                 sw={sw}
                 sh={sh}
                 {...interiorProps}
               />
             ) : (
-              <div style={{
-                position:        'absolute',
-                inset:           0,
-                backgroundColor: isNight ? '#1A1412' : '#A1887F',
-                display:         'flex',
-                alignItems:      'center',
-                justifyContent:  'center',
-                transition:      'background-color 1.5s',
-              }}>
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  backgroundColor: isNight ? '#1A1412' : '#A1887F',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'background-color 1.5s',
+                }}
+              >
                 <p style={{ fontSize: 13, color: 'rgba(240,239,233,0.5)', lineHeight: 1.7 }}>
                   [ Interior coming soon ]
                 </p>
@@ -329,28 +382,23 @@ export function BuildingInteriorPage() {
             )}
           </motion.div>
 
-          {/* ── Surface panel — enters rotateX(90°) → rotateX(0°), origin: top ── */}
-          {/* Stays mounted through entire Look Up sequence until zoom-out completes */}
-          {showSurface && (
-            <motion.div
-              ref={surfaceScope}
-              initial={{ rotateX: 90 }}
-              onAnimationComplete={handleSurfaceSettled}
-              style={{
-                position:           'absolute',
-                inset:              0,
-                transformOrigin:    'center top',
-                transformStyle:     'preserve-3d',
-                backfaceVisibility: 'hidden',
-              }}
-            >
-              <BarSurface isNight={isNight} />
-            </motion.div>
-          )}
+          {/* ── Surface (The Table) — always mounted, starts edge-on ── */}
+          <motion.div
+            ref={surfaceScope}
+            initial={{ rotateX: 90 }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              transformOrigin: 'center top',
+              backfaceVisibility: 'hidden',
+            }}
+          >
+            <BarSurface isNight={isNight} showMenu={showMenu} />
+          </motion.div>
         </div>
       </motion.div>
 
-      {/* ── Building label (wide view only) ── */}
+      {/* ── Building label (wide only) ── */}
       <AnimatePresence>
         {!isZoomed && (
           <motion.p
@@ -360,18 +408,18 @@ export function BuildingInteriorPage() {
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.3, delay: FADE_IN_DURATION + 0.15 }}
             style={{
-              position:      'absolute',
-              top:           sh * 0.05,
-              left:          0,
-              right:         0,
-              textAlign:     'center',
-              fontSize:      10,
+              position: 'absolute',
+              top: sh * 0.05,
+              left: 0,
+              right: 0,
+              textAlign: 'center',
+              fontSize: 10,
               letterSpacing: '0.25em',
-              color:         isNight ? 'rgba(201,169,110,0.7)' : 'rgba(90,58,16,0.7)',
+              color: isNight ? 'rgba(201,169,110,0.7)' : 'rgba(90,58,16,0.7)',
               textTransform: 'uppercase',
-              margin:        0,
+              margin: 0,
               pointerEvents: 'none',
-              zIndex:        10,
+              zIndex: 10,
             }}
           >
             {dialogue?.name ?? `> ${buildingId?.toUpperCase()}`}
@@ -389,25 +437,27 @@ export function BuildingInteriorPage() {
             exit={{ opacity: 0, y: 12 }}
             transition={{ duration: 0.3 }}
             style={{
-              position:        'absolute',
-              bottom:          sh * 0.10,
-              left:            '50%',
-              transform:       'translateX(-50%)',
-              width:           Math.min(sw * 0.55, 480),
+              position: 'absolute',
+              bottom: sh * 0.1,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: Math.min(sw * 0.55, 480),
               backgroundColor: isNight ? '#000000' : '#ffffff',
-              padding:         '12px 20px',
-              zIndex:          60,
-              border:          `1px solid ${isNight ? 'rgba(201,169,110,0.4)' : 'rgba(78,52,46,0.3)'}`,
+              padding: '12px 20px',
+              zIndex: 60,
+              border: `1px solid ${isNight ? 'rgba(201,169,110,0.4)' : 'rgba(78,52,46,0.3)'}`,
             }}
           >
-            <p style={{
-              fontFamily:    '"IBM Plex Mono", monospace',
-              fontSize:      10,
-              color:         isNight ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)',
-              letterSpacing: '0.2em',
-              margin:        '0 0 6px 0',
-              textTransform: 'uppercase',
-            }}>
+            <p
+              style={{
+                fontFamily: '"IBM Plex Mono", monospace',
+                fontSize: 10,
+                color: isNight ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.45)',
+                letterSpacing: '0.2em',
+                margin: '0 0 6px 0',
+                textTransform: 'uppercase',
+              }}
+            >
               {'> BARKEEP'}
             </p>
             <BarkeepTypewriter
@@ -415,30 +465,6 @@ export function BuildingInteriorPage() {
               isNight={isNight}
             />
             <ContinueButton isNight={isNight} onClick={handleContinue} />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* ── Menu book — appears only after surface spring fully settles ── */}
-      <AnimatePresence>
-        {showMenu && (
-          <motion.div
-            key="menu-overlay"
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.45, ease: [0.2, 0, 0.3, 1] }}
-            style={{
-              position:       'absolute',
-              inset:          0,
-              zIndex:         55,
-              pointerEvents:  'none',
-              display:        'flex',
-              alignItems:     'center',
-              justifyContent: 'center',
-            }}
-          >
-            <ZackMenu isNight={isNight} sw={sw} sh={sh} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -453,18 +479,18 @@ export function BuildingInteriorPage() {
             exit={{ opacity: 0, y: 8 }}
             transition={{ duration: 0.4 }}
             style={{
-              position:      'absolute',
-              bottom:        sh * 0.07,
-              left:          0,
-              right:         0,
-              textAlign:     'center',
-              fontSize:      10,
+              position: 'absolute',
+              bottom: sh * 0.07,
+              left: 0,
+              right: 0,
+              textAlign: 'center',
+              fontSize: 10,
               letterSpacing: '0.2em',
-              color:         isNight ? 'rgba(201,169,110,0.6)' : 'rgba(90,58,16,0.55)',
+              color: isNight ? 'rgba(201,169,110,0.6)' : 'rgba(90,58,16,0.55)',
               textTransform: 'uppercase',
-              margin:        0,
+              margin: 0,
               pointerEvents: 'none',
-              zIndex:        65,
+              zIndex: 65,
             }}
           >
             {'> Take your time. The good stuff is on every page.'}
@@ -472,360 +498,541 @@ export function BuildingInteriorPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Exit / Back / Look Up ── */}
-      <motion.button
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.4, delay: FADE_IN_DURATION + 0.35 }}
-        onClick={handleExit}
-        disabled={isTransitioning}
-        style={{
-          position:      'absolute',
-          bottom:        sh * 0.04,
-          left:          '50%',
-          transform:     'translateX(-50%)',
-          zIndex:        70,
-          background:    'transparent',
-          border:        `1px solid ${isNight ? 'rgba(201,169,110,0.4)' : 'rgba(90,58,16,0.35)'}`,
-          color:         isNight ? '#c9a96e' : '#5a3a10',
-          fontFamily:    '"IBM Plex Mono", monospace',
-          fontSize:      10,
-          letterSpacing: '0.2em',
-          textTransform: 'uppercase',
-          padding:       '8px 20px',
-          cursor:        isTransitioning ? 'default' : 'pointer',
-          opacity:       isTransitioning ? 0.4 : 1,
-          transition:    'border-color 1.5s, color 1.5s, opacity 0.2s',
-        }}
-      >
-        {isTilted ? '↑ Look Up' : isZoomed ? '← Back' : '← Exit'}
-      </motion.button>
+      {/* ── Nav button ── */}
+      <AnimatePresence>
+        {(!isZoomed || showDialogue || isTilted) && (
+          <motion.button
+            key="nav-button"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: isTransitioning ? 0.4 : 1 }}
+            exit={{ opacity: 0 }}
+            transition={{
+              duration: 0.4,
+              delay: !isZoomed && !isTilted ? FADE_IN_DURATION + 0.35 : 0,
+            }}
+            onClick={handleExit}
+            disabled={isTransitioning}
+            style={{
+              position: 'absolute',
+              bottom: sh * 0.04,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 70,
+              background: 'transparent',
+              border: `1px solid ${isNight ? 'rgba(201,169,110,0.4)' : 'rgba(90,58,16,0.35)'}`,
+              color: isNight ? '#c9a96e' : '#5a3a10',
+              fontFamily: '"IBM Plex Mono", monospace',
+              fontSize: 10,
+              letterSpacing: '0.2em',
+              textTransform: 'uppercase',
+              padding: '8px 20px',
+              cursor: isTransitioning ? 'default' : 'pointer',
+              transition: 'border-color 1.5s, color 1.5s',
+            }}
+          >
+            {isTilted ? '↑ Look Up' : isZoomed ? '← Back' : '← Exit'}
+          </motion.button>
+        )}
+      </AnimatePresence>
 
-      {/* ── Black overlay (entry/exit fade) ── */}
+      {/* ── Black overlay ── */}
       <motion.div
         ref={overlayScope}
         style={{
-          position:        'absolute',
-          inset:           0,
-          zIndex:          50,
+          position: 'absolute',
+          inset: 0,
+          zIndex: 50,
           backgroundColor: '#000000',
-          opacity:         1,
-          pointerEvents:   'none',
+          opacity: 1,
+          pointerEvents: 'none',
         }}
       />
     </div>
   )
 }
 
-// ─── Bar Surface ─────────────────────────────────────────────────────────────
+// ─── Bar Surface ────────────────────────────────────────────────────────────
 //
-// Top-down orthographic tabletop. viewBox="0 0 1000 600".
-// 6 mahogany planks with 1px dark gaps. Lamp cone from top-centre.
-// Edge vignette draws eye to centre. Glass ring stains. <g id="menu-anchor">.
+// viewBox="0 0 1000 600". The mahogany planks are always part of this surface.
+// Only the BOOK/MENU slides in — the table itself is static.
+//
+// Book = 320 SVG units (32% of 1000-unit viewBox), centred.
+// 340 SVG units of visible mahogany on each side — small book on a large bar.
+//
+// Book slides in from y:-150 ONLY after hinge + zoom-out are both complete.
 
-function BarSurface({ isNight }: { isNight: boolean }) {
-  const MAHOGANY    = isNight ? '#1e0905' : '#5C3317'
-  const PLANK_DARK  = isNight ? '#180704' : '#52291A'
+function BarSurface({ isNight, showMenu }: { isNight: boolean; showMenu: boolean }) {
+  // ── Wood palette ──
+  const MAHOGANY = isNight ? '#1e0905' : '#5C3317'
+  const PLANK_DARK = isNight ? '#180704' : '#52291A'
   const PLANK_LIGHT = isNight ? '#221007' : '#6B3D26'
-  const GRAIN       = isNight ? 'rgba(201,169,110,0.055)' : 'rgba(78,52,46,0.07)'
-  const GRAIN_HEAVY = isNight ? 'rgba(201,169,110,0.09)'  : 'rgba(78,52,46,0.11)'
-  const PLANK_GAP   = isNight ? '#0a0402' : '#2a1208'
-  const WEAR        = isNight ? 'rgba(201,169,110,0.03)'  : 'rgba(78,52,46,0.05)'
-  const LAMP_GLOW   = isNight ? 'rgba(255,172,0,0.16)'    : 'rgba(255,248,200,0.22)'
-  const VIGNETTE    = isNight ? 'rgba(0,0,0,0.55)'        : 'rgba(0,0,0,0.22)'
-  const RING        = isNight ? 'rgba(201,169,110,0.07)'  : 'rgba(78,52,46,0.09)'
+  const GRAIN = isNight ? 'rgba(201,169,110,0.055)' : 'rgba(78,52,46,0.07)'
+  const GRAIN_HEAVY = isNight ? 'rgba(201,169,110,0.09)' : 'rgba(78,52,46,0.11)'
+  const PLANK_GAP = isNight ? '#0a0402' : '#2a1208'
+  const WEAR = isNight ? 'rgba(201,169,110,0.03)' : 'rgba(78,52,46,0.05)'
+  const LAMP_GLOW = isNight ? 'rgba(255,172,0,0.16)' : 'rgba(255,248,200,0.22)'
+  const VIGNETTE = isNight ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)'
+  const RING = isNight ? 'rgba(201,169,110,0.07)' : 'rgba(78,52,46,0.09)'
 
+  // ── Book palette ──
+  const bk = isNight
+    ? {
+        cover: '#1e0e04',
+        page: 'rgba(201,169,110,0.15)', // slightly brighter page
+        spine: '#c9a96e',
+        title: '#c9a96e',
+        body: 'rgba(201,169,110,0.75)', // high contrast body text
+        accent: 'rgba(255,179,0,0.85)',
+        titleBg: 'rgba(201,169,110,0.08)',
+        shadow: 'rgba(0,0,0,0.35)',
+        separator: 'rgba(201,169,110,0.18)',
+      }
+    : {
+        cover: '#5D4037',
+        page: 'rgba(255,249,224,0.85)', // brighter page background
+        spine: '#4E342E',
+        title: '#3E2723', // darker title for contrast
+        body: 'rgba(62,39,35,0.80)', // high contrast body text
+        accent: 'rgba(100,40,10,0.90)',
+        titleBg: 'rgba(78,52,46,0.06)',
+        shadow: 'rgba(0,0,0,0.12)',
+        separator: 'rgba(78,52,46,0.15)',
+      }
+
+  const F = '"IBM Plex Mono", monospace'
   const PLANK_H = 98
-  const planks  = [0, 100, 200, 300, 400, 500]
+  const planks = [0, 100, 200, 300, 400, 500]
+
+  // Book in SVG viewBox units — 320 wide (32% of 1000), centred.
+  // Leaves 340 SVG units of mahogany on each side — wood visible on all 4 sides.
+  const BK_W = 320
+  const BK_H = BK_W * 0.72 // ~230
+  const BK_X = (1000 - BK_W) / 2 // 340
+  const BK_Y = (600 - BK_H) / 2 // ~185
 
   return (
-    <div style={{
-      position:        'absolute',
-      inset:           0,
-      backgroundColor: MAHOGANY,
-      overflow:        'hidden',
-    }}>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        backgroundColor: MAHOGANY,
+        overflow: 'hidden',
+      }}
+    >
       <svg
         viewBox="0 0 1000 600"
         preserveAspectRatio="xMidYMid slice"
-        width="100%" height="100%"
+        width="100%"
+        height="100%"
         style={{ display: 'block', position: 'absolute', inset: 0 }}
         fill="none"
       >
         <defs>
           <radialGradient id="bs-lamp" cx="50%" cy="8%" r="70%" fx="50%" fy="8%">
-            <stop offset="0%"   stopColor={LAMP_GLOW} />
+            <stop offset="0%" stopColor={LAMP_GLOW} />
             <stop offset="100%" stopColor="transparent" />
           </radialGradient>
           <radialGradient id="bs-vignette" cx="50%" cy="50%" r="60%">
-            <stop offset="30%"  stopColor="transparent" />
+            <stop offset="30%" stopColor="transparent" />
             <stop offset="100%" stopColor={VIGNETTE} />
           </radialGradient>
+          <linearGradient id="bk-curl-l" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="transparent" />
+            <stop offset="100%" stopColor={bk.shadow} />
+          </linearGradient>
+          <linearGradient id="bk-curl-r" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor={bk.shadow} />
+            <stop offset="100%" stopColor="transparent" />
+          </linearGradient>
         </defs>
 
-        {/* ── 6 horizontal mahogany planks ── */}
-        {planks.map((py, i) => {
-          const fill = i % 2 === 0 ? PLANK_DARK : PLANK_LIGHT
-          return (
-            <g key={i}>
-              <rect x="0" y={py} width="1000" height={PLANK_H} fill={fill} />
-              {i < planks.length - 1 && (
-                <line
-                  x1="0"    y1={py + PLANK_H}
-                  x2="1000" y2={py + PLANK_H}
-                  stroke={PLANK_GAP} strokeWidth="2"
-                />
-              )}
-              {/* 4 grain lines per plank — deterministic to avoid re-render flicker */}
-              {[16, 34, 58, 80].map((offset, j) => {
-                const gy    = py + offset
-                const gx1   = ((i * 79 + j * 131) % 160)
-                const gx2   = Math.min(gx1 + 220 + ((j * 97 + i * 53) % 500), 1000)
-                const heavy = (i + j) % 3 === 0
-                return (
-                  <line key={j}
-                    x1={gx1} y1={gy}
-                    x2={gx2} y2={gy}
-                    stroke={heavy ? GRAIN_HEAVY : GRAIN}
-                    strokeWidth={heavy ? 1.2 : 0.7}
+        {/* ── 6 mahogany planks ── */}
+        <g id="mahogany-planks">
+          {planks.map((py, i) => {
+            const fill = i % 2 === 0 ? PLANK_DARK : PLANK_LIGHT
+            return (
+              <g key={i}>
+                <rect x="0" y={py} width="1000" height={PLANK_H} fill={fill} />
+                {i < planks.length - 1 && (
+                  <line
+                    x1="0"
+                    y1={py + PLANK_H}
+                    x2="1000"
+                    y2={py + PLANK_H}
+                    stroke={PLANK_GAP}
+                    strokeWidth="2"
                   />
-                )
-              })}
-            </g>
-          )
-        })}
+                )}
+                {[16, 34, 58, 80].map((offset, j) => {
+                  const gy = py + offset
+                  const gx1 = (i * 79 + j * 131) % 160
+                  const gx2 = Math.min(gx1 + 220 + ((j * 97 + i * 53) % 500), 1000)
+                  const heavy = (i + j) % 3 === 0
+                  return (
+                    <line
+                      key={j}
+                      x1={gx1}
+                      y1={gy}
+                      x2={gx2}
+                      y2={gy}
+                      stroke={heavy ? GRAIN_HEAVY : GRAIN}
+                      strokeWidth={heavy ? 1.2 : 0.7}
+                    />
+                  )
+                })}
+              </g>
+            )
+          })}
+        </g>
 
-        {/* ── Lamp light cone ── */}
         <rect x="0" y="0" width="1000" height="600" fill="url(#bs-lamp)" />
-
-        {/* ── Edge vignette — focus eye on centre ── */}
         <rect x="0" y="0" width="1000" height="600" fill="url(#bs-vignette)" />
 
-        {/* ── Glass ring stains (old dried rings) ── */}
-        <ellipse cx="680" cy="430" rx="38" ry="12"
-          fill={WEAR} stroke={RING} strokeWidth="0.8"
-          transform="rotate(-8 680 430)"
+        {/* ── Glass ring stains ── */}
+        <ellipse
+          cx="160"
+          cy="480"
+          rx="32"
+          ry="10"
+          fill={WEAR}
+          stroke={RING}
+          strokeWidth="0.8"
+          transform="rotate(-8 160 480)"
         />
-        <ellipse cx="280" cy="180" rx="28" ry="9"
-          fill={WEAR} stroke={RING} strokeWidth="0.7"
-          transform="rotate(5 280 180)"
+        <ellipse
+          cx="830"
+          cy="130"
+          rx="24"
+          ry="8"
+          fill={WEAR}
+          stroke={RING}
+          strokeWidth="0.7"
+          transform="rotate(5 830 130)"
         />
-        <ellipse cx="820" cy="140" rx="22" ry="7"
-          fill={WEAR} stroke={RING} strokeWidth="0.6"
-          transform="rotate(-3 820 140)"
-        />
-        <circle cx="720" cy="390" r="22"
-          fill="none" stroke={RING} strokeWidth="1"
-        />
-        <circle cx="255" cy="170" r="16"
-          fill="none" stroke={RING} strokeWidth="0.8"
-        />
+        <circle cx="140" cy="140" r="18" fill="none" stroke={RING} strokeWidth="1" />
+        <circle cx="860" cy="460" r="14" fill="none" stroke={RING} strokeWidth="0.8" />
 
-        {/* ── Menu book drop shadow (underneath ZackMenu overlay) ── */}
-        <rect x="310" y="195" width="380" height="240" rx="6"
-          fill={isNight ? 'rgba(0,0,0,0.6)' : 'rgba(0,0,0,0.22)'}
-          style={{ filter: 'blur(20px)' }}
-        />
-
-        {/* ── Menu anchor — centre reference point ── */}
+        {/* ── Menu anchor ── */}
         <g id="menu-anchor" transform="translate(500, 300)" />
+
+        {/* ══════════════════════════════════════════════════════════════════
+            BOOK — rendered in SVG viewBox units so it's immune to CSS scale.
+            Slides in from y:-150 when showMenu flips true (1.0s into hinge).
+            ══════════════════════════════════════════════════════════════════ */}
+        <g
+          transform={`translate(${BK_X}, ${showMenu ? BK_Y : BK_Y - 150})`}
+          opacity={showMenu ? 1 : 0}
+          style={{
+            transition: `transform ${TRANSITION_SETTINGS.menuSlideDur}s cubic-bezier(0.45, 0, 0.55, 1), opacity ${TRANSITION_SETTINGS.menuSlideDur * 0.6}s ease`,
+          }}
+        >
+          {/* Scale the 460×332 book viewBox to fit in BK_W×BK_H */}
+          <g transform={`scale(${BK_W / 460}, ${BK_H / 332})`}>
+            {/* Drop shadow */}
+            <rect
+              x="8"
+              y="12"
+              width="444"
+              height="316"
+              rx="6"
+              fill={isNight ? 'rgba(0,0,0,0.50)' : 'rgba(0,0,0,0.15)'}
+              style={{ filter: 'blur(8px)' }}
+            />
+
+            {/* Cover */}
+            <rect
+              x="4"
+              y="4"
+              width="452"
+              height="324"
+              rx="4"
+              fill={bk.cover}
+              stroke={bk.spine}
+              strokeWidth="1.5"
+            />
+
+            {/* Pages */}
+            <rect x="12" y="12" width="214" height="308" rx="2" fill={bk.page} />
+            <rect x="234" y="12" width="214" height="308" rx="2" fill={bk.page} />
+
+            {/* Spine + curl shadows */}
+            <line
+              x1="230"
+              y1="8"
+              x2="230"
+              y2="324"
+              stroke={bk.spine}
+              strokeWidth="1.5"
+              strokeOpacity="0.4"
+            />
+            <rect x="212" y="12" width="18" height="308" fill="url(#bk-curl-l)" />
+            <rect x="230" y="12" width="18" height="308" fill="url(#bk-curl-r)" />
+
+            {/* ── LEFT PAGE — THE ATHLETE ── */}
+            <rect x="24" y="20" width="190" height="26" rx="1" fill={bk.titleBg} />
+            <text
+              x="119"
+              y="38"
+              textAnchor="middle"
+              fill={bk.title}
+              fontFamily={F}
+              fontSize="9"
+              letterSpacing="0.18em"
+              fontWeight="600"
+            >
+              THE ATHLETE
+            </text>
+
+            <text x="24" y="60" fill={bk.body} fontFamily={F} fontSize="6" letterSpacing="0.08em">
+              Div. III Men's Water Polo
+            </text>
+            <text x="24" y="72" fill={bk.body} fontFamily={F} fontSize="6" letterSpacing="0.08em">
+              4-Time Academic All-American
+            </text>
+            <line x1="24" y1="80" x2="210" y2="80" stroke={bk.separator} strokeWidth="0.6" />
+
+            <text
+              x="24"
+              y="96"
+              fill={bk.title}
+              fontFamily={F}
+              fontSize="6.5"
+              letterSpacing="0.06em"
+              opacity="0.8"
+            >
+              CAREER STATS
+            </text>
+
+            {(
+              [
+                [110, '4-Year Starter, Goalkeeper'],
+                [124, '4x Academic All-American'],
+                [138, 'Conference Champion'],
+                [152, 'Captain, Senior Year'],
+              ] as [number, string][]
+            ).map(([y, line]) => (
+              <text
+                key={y}
+                x="28"
+                y={y}
+                fill={bk.body}
+                fontFamily={F}
+                fontSize="5.8"
+                letterSpacing="0.04em"
+              >
+                {line}
+              </text>
+            ))}
+
+            <line x1="24" y1="164" x2="140" y2="164" stroke={bk.separator} strokeWidth="0.6" />
+
+            <text
+              x="24"
+              y="180"
+              fill={bk.title}
+              fontFamily={F}
+              fontSize="6.5"
+              letterSpacing="0.06em"
+              opacity="0.8"
+            >
+              TRAITS FORGED
+            </text>
+
+            {(
+              [
+                [194, 'Discipline under pressure'],
+                [208, 'Team-first mentality'],
+                [222, 'Relentless work ethic'],
+                [236, 'Leadership by example'],
+              ] as [number, string][]
+            ).map(([y, line]) => (
+              <text
+                key={y}
+                x="28"
+                y={y}
+                fill={bk.body}
+                fontFamily={F}
+                fontSize="5.8"
+                letterSpacing="0.04em"
+              >
+                {line}
+              </text>
+            ))}
+
+            <line x1="24" y1="248" x2="140" y2="248" stroke={bk.separator} strokeWidth="0.6" />
+
+            <text
+              x="24"
+              y="266"
+              fill={bk.accent}
+              fontFamily={F}
+              fontSize="5.5"
+              letterSpacing="0.04em"
+              fontStyle="italic"
+            >
+              "The pool taught me that
+            </text>
+            <text
+              x="24"
+              y="278"
+              fill={bk.accent}
+              fontFamily={F}
+              fontSize="5.5"
+              letterSpacing="0.04em"
+              fontStyle="italic"
+            >
+              {' '}
+              every pixel matters as much
+            </text>
+            <text
+              x="24"
+              y="290"
+              fill={bk.accent}
+              fontFamily={F}
+              fontSize="5.5"
+              letterSpacing="0.04em"
+              fontStyle="italic"
+            >
+              {' '}
+              as every second on the clock."
+            </text>
+
+            {/* ── RIGHT PAGE — THE CAREER ── */}
+            <text
+              x="246"
+              y="30"
+              fill={bk.title}
+              fontFamily={F}
+              fontSize="7.5"
+              letterSpacing="0.14em"
+              fontWeight="600"
+            >
+              THE CAREER
+            </text>
+
+            <text
+              x="246"
+              y="48"
+              fill={bk.title}
+              fontFamily={F}
+              fontSize="6"
+              letterSpacing="0.06em"
+              opacity="0.8"
+            >
+              THE STARTUP
+            </text>
+            <text
+              x="246"
+              y="60"
+              fill={bk.body}
+              fontFamily={F}
+              fontSize="5.5"
+              letterSpacing="0.06em"
+            >
+              Terrapin Rewards · 1 of 2 Founders
+            </text>
+            <line x1="246" y1="68" x2="432" y2="68" stroke={bk.separator} strokeWidth="0.6" />
+
+            {(
+              [
+                [82, 'Built the entire product from zero:'],
+                [96, 'UI/UX design, front-end, branding.'],
+                [114, 'Pitched to investors. Won funding.'],
+                [128, 'Managed dev sprints solo while'],
+                [142, 'co-founder handled operations.'],
+                [160, 'Learned that wearing every hat'],
+                [174, 'makes you a better designer —'],
+                [188, 'you understand constraints deeply.'],
+              ] as [number, string][]
+            ).map(([y, line]) => (
+              <text
+                key={y}
+                x="250"
+                y={y}
+                fill={bk.body}
+                fontFamily={F}
+                fontSize="5.8"
+                letterSpacing="0.04em"
+              >
+                {line}
+              </text>
+            ))}
+
+            <line x1="246" y1="202" x2="360" y2="202" stroke={bk.separator} strokeWidth="0.6" />
+
+            <text
+              x="246"
+              y="218"
+              fill={bk.title}
+              fontFamily={F}
+              fontSize="6"
+              letterSpacing="0.06em"
+              opacity="0.8"
+            >
+              THE PIVOT
+            </text>
+            <text
+              x="246"
+              y="230"
+              fill={bk.body}
+              fontFamily={F}
+              fontSize="5.5"
+              letterSpacing="0.06em"
+            >
+              UI/UX · Software Engineering
+            </text>
+            <line x1="246" y1="238" x2="432" y2="238" stroke={bk.separator} strokeWidth="0.6" />
+
+            {(
+              [
+                [252, 'Design systems that scale.'],
+                [266, 'Interfaces that feel alive.'],
+                [280, 'Code that respects the craft.'],
+                [298, 'Looking for a team that ships'],
+                [312, 'beautiful, purposeful software.'],
+              ] as [number, string][]
+            ).map(([y, line]) => (
+              <text
+                key={y}
+                x="250"
+                y={y}
+                fill={bk.body}
+                fontFamily={F}
+                fontSize="5.8"
+                letterSpacing="0.04em"
+              >
+                {line}
+              </text>
+            ))}
+
+            {/* Corner ornaments */}
+            {(
+              [
+                [16, 16],
+                [220, 16],
+                [16, 316],
+                [220, 316],
+                [238, 16],
+                [440, 16],
+                [238, 316],
+                [440, 316],
+              ] as [number, number][]
+            ).map(([ox, oy]) => (
+              <circle
+                key={`${ox}-${oy}`}
+                cx={ox}
+                cy={oy}
+                r="2"
+                fill="none"
+                stroke={bk.spine}
+                strokeWidth="0.5"
+                strokeOpacity="0.25"
+              />
+            ))}
+          </g>
+        </g>
       </svg>
     </div>
-  )
-}
-
-// ─── ZackMenu — 3-page SVG spread ────────────────────────────────────────────
-//
-// Page 1 (left):  The Athlete — Water Polo / Academic All-American
-// Page 2 (right-top):    The Startup — Terrapin Rewards
-// Page 3 (right-bottom): The Vision  — UI/UX Software Engineering
-
-function ZackMenu({ isNight, sw, sh }: { isNight: boolean; sw: number; sh: number }) {
-  const bookW = Math.min(sw * 0.58, 440)
-  const bookH = bookW * 0.72
-
-  const c = isNight
-    ? {
-        cover:       '#1e0e04',
-        page:        'rgba(201,169,110,0.10)',
-        spine:       '#c9a96e',
-        title:       '#c9a96e',
-        body:        'rgba(201,169,110,0.55)',
-        accent:      'rgba(255,179,0,0.75)',
-        titleBg:     'rgba(201,169,110,0.06)',
-        spineShadow: 'rgba(0,0,0,0.35)',
-        separator:   'rgba(201,169,110,0.12)',
-      }
-    : {
-        cover:       '#5D4037',
-        page:        'rgba(255,249,224,0.78)',
-        spine:       '#4E342E',
-        title:       '#4E342E',
-        body:        'rgba(78,52,46,0.6)',
-        accent:      'rgba(120,60,20,0.85)',
-        titleBg:     'rgba(78,52,46,0.04)',
-        spineShadow: 'rgba(0,0,0,0.10)',
-        separator:   'rgba(78,52,46,0.10)',
-      }
-
-  const F = '"IBM Plex Mono", monospace'
-
-  return (
-    <svg
-      width={bookW} height={bookH}
-      viewBox="0 0 460 332"
-      fill="none"
-      style={{ display: 'block', marginTop: -sh * 0.03 }}
-    >
-      {/* Drop shadow */}
-      <rect x="8" y="12" width="444" height="316" rx="6"
-        fill={isNight ? 'rgba(0,0,0,0.50)' : 'rgba(0,0,0,0.15)'}
-        style={{ filter: 'blur(12px)' }}
-      />
-
-      {/* Book cover */}
-      <rect x="4" y="4" width="452" height="324" rx="4"
-        fill={c.cover} stroke={c.spine} strokeWidth="1.5"
-      />
-
-      {/* Left page */}
-      <rect x="12" y="12" width="214" height="308" rx="2" fill={c.page} />
-      {/* Right page */}
-      <rect x="234" y="12" width="214" height="308" rx="2" fill={c.page} />
-
-      {/* Spine line */}
-      <line x1="230" y1="8" x2="230" y2="324"
-        stroke={c.spine} strokeWidth="1.5" strokeOpacity="0.4"
-      />
-
-      {/* Spine curl shadows */}
-      <defs>
-        <linearGradient id="zk-curl-l" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"   stopColor="transparent" />
-          <stop offset="100%" stopColor={c.spineShadow} />
-        </linearGradient>
-        <linearGradient id="zk-curl-r" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%"   stopColor={c.spineShadow} />
-          <stop offset="100%" stopColor="transparent" />
-        </linearGradient>
-      </defs>
-      <rect x="212" y="12" width="18" height="308" fill="url(#zk-curl-l)" />
-      <rect x="230" y="12" width="18" height="308" fill="url(#zk-curl-r)" />
-
-      {/* ══ PAGE 1 — THE ATHLETE ══ */}
-      <rect x="24" y="20" width="190" height="26" rx="1" fill={c.titleBg} />
-      <text x="119" y="38" textAnchor="middle"
-        fill={c.title} fontFamily={F} fontSize="9"
-        letterSpacing="0.18em" fontWeight="600"
-      >ZACK'S SPECIALS</text>
-
-      <text x="24" y="60" fill={c.body} fontFamily={F}
-        fontSize="6" letterSpacing="0.08em"
-      >Water Polo · Academic All-American</text>
-      <line x1="24" y1="68" x2="210" y2="68" stroke={c.separator} strokeWidth="0.6" />
-
-      <text x="24" y="84" fill={c.title} fontFamily={F}
-        fontSize="6.5" letterSpacing="0.06em" opacity="0.8"
-      >CAREER STATS</text>
-
-      {([
-        [98,  '4-Year Starter, Goalkeeper'],
-        [112, '4× Academic All-American'],
-        [126, 'Conference Champion'],
-        [140, 'Captain, Senior Year'],
-      ] as [number, string][]).map(([y, line]) => (
-        <text key={y} x="28" y={y}
-          fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line}</text>
-      ))}
-
-      <line x1="24" y1="152" x2="140" y2="152" stroke={c.separator} strokeWidth="0.6" />
-
-      <text x="24" y="168" fill={c.title} fontFamily={F}
-        fontSize="6.5" letterSpacing="0.06em" opacity="0.8"
-      >TRAITS FORGED</text>
-
-      {([
-        [182, 'Discipline under pressure'],
-        [196, 'Team-first mentality'],
-        [210, 'Relentless work ethic'],
-        [224, 'Leadership by example'],
-      ] as [number, string][]).map(([y, line]) => (
-        <text key={y} x="28" y={y}
-          fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line}</text>
-      ))}
-
-      <line x1="24" y1="236" x2="140" y2="236" stroke={c.separator} strokeWidth="0.6" />
-
-      <text x="24" y="254" fill={c.accent} fontFamily={F}
-        fontSize="5.5" letterSpacing="0.04em" fontStyle="italic"
-      >"The pool taught me that</text>
-      <text x="24" y="266" fill={c.accent} fontFamily={F}
-        fontSize="5.5" letterSpacing="0.04em" fontStyle="italic"
-      > every pixel matters as much</text>
-      <text x="24" y="278" fill={c.accent} fontFamily={F}
-        fontSize="5.5" letterSpacing="0.04em" fontStyle="italic"
-      > as every second on the clock."</text>
-
-      {/* ══ PAGE 2 — THE STARTUP ══ */}
-      <text x="246" y="30" fill={c.title} fontFamily={F}
-        fontSize="7.5" letterSpacing="0.14em" fontWeight="600"
-      >THE STARTUP</text>
-      <text x="246" y="44" fill={c.body} fontFamily={F}
-        fontSize="5.5" letterSpacing="0.06em"
-      >Terrapin Rewards · 1 of 2 Employees</text>
-      <line x1="246" y1="52" x2="432" y2="52" stroke={c.separator} strokeWidth="0.6" />
-
-      {([
-        [66,  'Built the entire product from zero:'],
-        [80,  'UI/UX design, front-end, branding.'],
-        [98,  'Pitched to investors. Won funding.'],
-        [112, 'Managed dev sprints solo while'],
-        [126, 'co-founder handled operations.'],
-        [144, 'Learned that wearing every hat'],
-        [158, 'makes you a better designer —'],
-        [172, 'you understand constraints deeply.'],
-      ] as [number, string][]).map(([y, line]) => (
-        <text key={y} x="250" y={y}
-          fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line}</text>
-      ))}
-
-      <line x1="246" y1="186" x2="360" y2="186" stroke={c.separator} strokeWidth="0.6" />
-
-      {/* ══ PAGE 3 — THE VISION ══ */}
-      <text x="246" y="204" fill={c.title} fontFamily={F}
-        fontSize="7.5" letterSpacing="0.14em" fontWeight="600"
-      >THE VISION</text>
-      <text x="246" y="218" fill={c.body} fontFamily={F}
-        fontSize="5.5" letterSpacing="0.06em"
-      >UI/UX · Software Engineering</text>
-      <line x1="246" y1="226" x2="432" y2="226" stroke={c.separator} strokeWidth="0.6" />
-
-      {([
-        [240, 'Design systems that scale.'],
-        [254, 'Interfaces that feel alive.'],
-        [268, 'Code that respects the craft.'],
-        [286, 'Looking for a team that ships'],
-        [300, 'beautiful, purposeful software.'],
-      ] as [number, string][]).map(([y, line]) => (
-        <text key={y} x="250" y={y}
-          fill={c.body} fontFamily={F} fontSize="5.8" letterSpacing="0.04em"
-        >{line}</text>
-      ))}
-
-      {/* Corner ornaments */}
-      {([
-        [16, 16], [220, 16], [16, 316], [220, 316],
-        [238, 16], [440, 16], [238, 316], [440, 316],
-      ] as [number, number][]).map(([ox, oy]) => (
-        <circle key={`${ox}-${oy}`} cx={ox} cy={oy} r="2"
-          fill="none" stroke={c.spine}
-          strokeWidth="0.5" strokeOpacity="0.25"
-        />
-      ))}
-    </svg>
   )
 }
 
@@ -844,18 +1051,22 @@ function BarkeepTypewriter({ text, isNight }: { text: string; isNight: boolean }
         clearInterval(intervalRef.current)
       }
     }, 35)
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current) }
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
   }, [text])
 
   return (
-    <p style={{
-      fontFamily: '"IBM Plex Mono", monospace',
-      fontSize:    11,
-      color:       isNight ? '#ffffff' : '#000000',
-      lineHeight:  1.6,
-      margin:      0,
-      minHeight:   36,
-    }}>
+    <p
+      style={{
+        fontFamily: '"IBM Plex Mono", monospace',
+        fontSize: 11,
+        color: isNight ? '#ffffff' : '#000000',
+        lineHeight: 1.6,
+        margin: 0,
+        minHeight: 36,
+      }}
+    >
       {displayed}
       <span style={{ opacity: 0.5 }}>▌</span>
     </p>
@@ -871,19 +1082,19 @@ function ContinueButton({ isNight, onClick }: { isNight: boolean; onClick: () =>
       transition={{ duration: 0.4, delay: 3.2 }}
       onClick={onClick}
       style={{
-        display:       'block',
-        marginTop:     8,
-        marginLeft:    'auto',
-        background:    'transparent',
-        border:        `1px solid ${isNight ? 'rgba(201,169,110,0.35)' : 'rgba(78,52,46,0.25)'}`,
-        color:         isNight ? '#c9a96e' : '#5a3a10',
-        fontFamily:    '"IBM Plex Mono", monospace',
-        fontSize:      9,
+        display: 'block',
+        marginTop: 8,
+        marginLeft: 'auto',
+        background: 'transparent',
+        border: `1px solid ${isNight ? 'rgba(201,169,110,0.35)' : 'rgba(78,52,46,0.25)'}`,
+        color: isNight ? '#c9a96e' : '#5a3a10',
+        fontFamily: '"IBM Plex Mono", monospace',
+        fontSize: 9,
         letterSpacing: '0.2em',
         textTransform: 'uppercase',
-        padding:       '5px 14px',
-        cursor:        'pointer',
-        transition:    'border-color 0.3s, color 0.3s',
+        padding: '5px 14px',
+        cursor: 'pointer',
+        transition: 'border-color 0.3s, color 0.3s',
       }}
     >
       Continue →

@@ -1,15 +1,19 @@
 import type { MotionValue } from 'framer-motion'
 
 // Shared props for all interior SVG components.
-// mouseSpring: spring-damped value in range -1 → 1 (left → right).
-// Each interior derives two MotionValues from this:
-//   wallMV  = mouseSpring * sw * -0.10  (wall/floor/ceiling group, 10% speed)
-//   furnMV  = mouseSpring * sw * -0.20  (furniture/NPC group, 20% speed)
-// Both groups are 160% wide so edges never enter the viewport at any mouse position.
+//
+// mouseSpring:  spring-damped pan value, range -1 → 1 (left → right).
+//               During IDLE: all layers move at identical speed (locked block).
+//               A single panX transform is derived from this — no parallax.
+//
+// zoomProgress: 0 → 1 MotionValue animated during the barkeep zoom.
+//               Each layer derives its own x-offset using useTransform.
+//               This is where parallax lives — not in mouse pan.
 export interface InteriorProps {
-  isNight:          boolean
-  mouseSpring:      MotionValue<number>
-  sw:               number
-  sh:               number
-  onBarkeepClick?:  () => void
+  isNight: boolean
+  mouseSpring: MotionValue<number>
+  zoomProgress: MotionValue<number>
+  sw: number
+  sh: number
+  onBarkeepClick?: () => void
 }
