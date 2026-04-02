@@ -45,38 +45,44 @@ const SEATED_SCALE = 6.8
 const SEATED_Y_OFFSET = -480 // fixed px — pulls torso/apron into center
 const ZOOM_DURATION = 1.0
 
-// ─── 3D Hinge coordinate system ─────────────────────────────────────────────
+// ─── 3D Hinge coordinate system (Nadir Tilt) ─────────────────────────────────
 //
-// Perspective: 1200px on stageScope (parent of hinge container).
-// Both panels always in DOM. Surface starts at rotateX(90) — edge-on, invisible.
+// The "Nadir Tilt" — looking down at the bar surface:
+// User brings chin to chest. Bar surface "rises" from below to fill screen.
 //
-// Wall panel:    transform-origin: center bottom (bottom edge = hinge line)
-//   rotateX(-90) → top swings AWAY from user. Barkeep recedes, surface appears.
+// Wall panel:    transform-origin: center bottom
+//   rotateX(0 → -90): top swings AWAY from user. Barkeep recedes.
+//   This creates the "falling back" effect.
 //
-// Surface panel: transform-origin: center top   (top edge = hinge line)
-//   rotateX(90→0) → bar surface rotates up into view from below.
+// Surface panel: transform-origin: center bottom (AT BOTTOM OF VIEWPORT)
+//   rotateX(90 → 0): wood grain "rises" from bottom bezel to fill screen.
+//   Like bringing your chin to your chest — the surface comes up to meet you.
+//
+// Menu: Only slides in AFTER hinge reaches 0 degrees.
 //
 // CRITICAL SEQUENCING: Hinge and zoom are NEVER simultaneous.
-//   Simultaneous zoom-out reveals the ceiling lights → reads as "looking up."
-//   The hinge always runs at 6.8× so only the barkeep area is visible.
 //
-// Look Down (Continue) — 3 sequential phases:
-//   1. Hinge at 6.8× (1.6s): Wall -90, Surface 0. Ceiling off-screen.
-//   2. Hide room (instant): opacity:0 on room panel. Prevents ghost artifacts.
-//   3. Zoom out (0.8s): 6.8→1.0. Reveals full bar surface. Book slides in.
-//
-// Look Up — 3 sequential phases:
-//   1. Zoom in (0.8s): 1.0→6.8. Crops to barkeep area, hides ceiling.
-//   2. Show room (instant): opacity:1 on room panel before reverse hinge.
-//   3. Reverse hinge at 6.8× (1.6s): Wall 0, Surface 90.
-//   Result: 6.8× on barkeep. No ceiling visible at any point.
-//
-const PERSPECTIVE = 1200
+const PERSPECTIVE = 1000 // Heavy perspective for depth
+
+// Hinge dynamics — single source of truth (COMMENTED OUT: using Cinema-Slide instead)
+// const HINGE_DYNAMICS = {
+//   wallAngle: -90,        // Wall falls back AWAY from user
+//   tableStartAngle: 90,   // Table starts edge-on, standing up at bottom
+//   tableEndAngle: 0,       // Table lays flat toward camera
+// }
+const HINGE_ROTATION_DURATION = 1.4 // seconds — heavy, atmospheric
+
+// Cinema-Slide constants
+const SLIDE_DURATION = 1.2 // seconds
+
+// ─── Foreground Scaling Protocol ─────────────────────────────────────────────
+// NOTE: ForegroundLayer is now OUTSIDE the stage — no scale math needed!
+// The table/menu are in their own layer, unaffected by stage zoom.
 
 // ─── Centralized transition settings ────────────────────────────────────────
 const TRANSITION_SETTINGS = {
-  hingeDuration: 1.6, // 1600ms — "heavy head"
-  hingeEase: [0.45, 0, 0.55, 1] as const, // Slow-In, Slow-Out
+  hingeDuration: HINGE_ROTATION_DURATION,
+  hingeEase: [0.4, 0, 0.2, 1] as const, // Smooth, heavy transition
   zoomRevealDur: 0.8, // 800ms zoom out/in (after/before hinge)
   menuSlideDur: 0.8, // 800ms book slide-in CSS transition
   zoomOutEase: [0.4, 0, 0.2, 1] as const, // Back button: zoomed→wide
@@ -98,6 +104,7 @@ export function BuildingInteriorPage() {
   const [overlayScope, animateOverlay] = useAnimate()
   const [stageScope, animateStage] = useAnimate()
   const [roomScope, animateRoom] = useAnimate()
+  const [foregroundScope, animateForeground] = useAnimate()
   const [surfaceScope, animateSurface] = useAnimate()
 
   const hasFadedIn = useRef(false)
@@ -116,7 +123,7 @@ export function BuildingInteriorPage() {
   const [showDialogue, setShowDialogue] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showMenuLabel, setShowMenuLabel] = useState(false)
-  const [roomHidden, setRoomHidden] = useState(false) // ghost-table fix
+  // const [roomHidden, setRoomHidden] = useState(false) // ghost-table fix (unused with Cinema-Slide)
 
   const onMouseMove = useCallback(
     (e: React.MouseEvent) => {
@@ -171,52 +178,36 @@ export function BuildingInteriorPage() {
     setIsTransitioning(false)
   }, [isZoomed, isTransitioning, mouseSpring, animateStage, stageScope, sh, zoomProgress])
 
-  // ── Continue → "Heavy Head" Hinge (Look Down) ──
+  // ── Continue → "Cinema-Slide" (Look Down) ──
+  // Wall slides up, ForegroundLayer slides in from bottom
+  // SCALE STAYS AT 6.8× throughout — no zoom changes during cinema-slide
   const handleContinue = useCallback(async () => {
     if (isTilted || isTransitioning) return
     setIsTransitioning(true)
     setShowDialogue(false)
     setIsTilted(true)
 
-    // Phase 1: Hinge at 6.8× — ceiling stays off-screen.
-    // Wall: 0 → -90 (top swings away from user). Surface: 90 → 0 (rises into view).
+    // Phase 1: Cinema-Slide at 6.8× (scale unchanged)
+    // Room (Barkeep): slides up off-screen (y: 0 → -100%)
+    // ForegroundLayer (Table): slides up from bottom (y: 100% → 0%)
     await Promise.all([
       animateRoom(
         roomScope.current,
-        { rotateX: -90 },
-        { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+        { y: '-100%' },
+        { duration: SLIDE_DURATION, ease: TRANSITION_SETTINGS.hingeEase }
       ),
-      animateSurface(
-        surfaceScope.current,
-        { rotateX: 0 },
-        { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+      animateForeground(
+        foregroundScope.current,
+        { y: '0%' },
+        { duration: SLIDE_DURATION, ease: TRANSITION_SETTINGS.hingeEase }
       ),
     ])
 
-    // Phase 2: Hide room panel to prevent ghost artifacts during zoom-out.
-    setRoomHidden(true)
-
-    // Phase 3: Zoom out to reveal full bar surface (10.0→1.0).
-    await animateStage(
-      stageScope.current,
-      { scale: 1, y: 0 },
-      { duration: TRANSITION_SETTINGS.zoomRevealDur, ease: TRANSITION_SETTINGS.hingeEase }
-    )
-
-    // Phase 4: Book slides in only AFTER hinge + zoom complete.
+    // Phase 2: Book slides in after table reaches position.
     setShowMenu(true)
     setTimeout(() => setShowMenuLabel(true), 300)
     setIsTransitioning(false)
-  }, [
-    isTilted,
-    isTransitioning,
-    animateRoom,
-    roomScope,
-    animateSurface,
-    surfaceScope,
-    animateStage,
-    stageScope,
-  ])
+  }, [isTilted, isTransitioning, animateForeground, foregroundScope, animateStage, stageScope])
 
   // ── Exit: Look Up / Back / Exit ──
   const handleExit = useCallback(async () => {
@@ -228,32 +219,22 @@ export function BuildingInteriorPage() {
       setShowMenuLabel(false)
       setShowMenu(false)
 
-      // Phase 1: Zoom in to barkeep depth (1.0→6.8). Ceiling exits visible area.
-      await animateStage(
-        stageScope.current,
-        { scale: SEATED_SCALE, y: SEATED_Y_OFFSET },
-        { duration: TRANSITION_SETTINGS.zoomRevealDur, ease: TRANSITION_SETTINGS.hingeEase }
-      )
-
-      // Phase 2: Restore room panel before reverse hinge.
-      setRoomHidden(false)
-
-      // Phase 3: Reverse hinge at 6.8× — ceiling stays off-screen.
-      // Wall: -90 → 0 (returns to vertical). Surface: 0 → 90 (drops away).
+      // Scale is ALREADY at 6.8× — just reverse the cinema-slide
+      // Room slides back, ForegroundLayer slides back down
       await Promise.all([
         animateRoom(
           roomScope.current,
-          { rotateX: 0 },
-          { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+          { y: '0%' },
+          { duration: SLIDE_DURATION, ease: TRANSITION_SETTINGS.hingeEase }
         ),
-        animateSurface(
-          surfaceScope.current,
-          { rotateX: 90 },
-          { duration: TRANSITION_SETTINGS.hingeDuration, ease: TRANSITION_SETTINGS.hingeEase }
+        animateForeground(
+          foregroundScope.current,
+          { y: '100%' },
+          { duration: SLIDE_DURATION, ease: TRANSITION_SETTINGS.hingeEase }
         ),
       ])
 
-      // Wall vertical. Scale is 6.8× — barkeep conversation depth. STOP.
+      // Back at seated view. STOP.
       setIsTilted(false)
       setShowDialogue(true)
       setIsTransitioning(false)
@@ -345,13 +326,10 @@ export function BuildingInteriorPage() {
           {/* ── Room (The Wall) — always mounted, hidden when tilted to prevent ghost ── */}
           <motion.div
             ref={roomScope}
-            initial={{ rotateX: 0 }}
+            initial={{ y: '0%' }}
             style={{
               position: 'absolute',
               inset: 0,
-              transformOrigin: 'center bottom',
-              backfaceVisibility: 'hidden',
-              opacity: roomHidden ? 0 : 1,
             }}
           >
             {Interior ? (
@@ -381,21 +359,21 @@ export function BuildingInteriorPage() {
               </div>
             )}
           </motion.div>
-
-          {/* ── Surface (The Table) — always mounted, starts edge-on ── */}
-          <motion.div
-            ref={surfaceScope}
-            initial={{ rotateX: 90 }}
-            style={{
-              position: 'absolute',
-              inset: 0,
-              transformOrigin: 'center top',
-              backfaceVisibility: 'hidden',
-            }}
-          >
-            <BarSurface isNight={isNight} showMenu={showMenu} />
-          </motion.div>
         </div>
+      </motion.div>
+
+      {/* ── Foreground Layer — OUTSIDE stage, unaffected by zoom ── */}
+      {/* Table/Menu in its own layer: separate from Barkeep zoom */}
+      <motion.div
+        ref={foregroundScope}
+        initial={{ y: '100%' }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none', // Allow clicks to pass through to Barkeep
+        }}
+      >
+        <BarSurface isNight={isNight} showMenu={showMenu} />
       </motion.div>
 
       {/* ── Building label (wide only) ── */}
