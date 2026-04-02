@@ -123,6 +123,7 @@ export function BuildingInteriorPage() {
   const [showDialogue, setShowDialogue] = useState(false)
   const [showMenu, setShowMenu] = useState(false)
   const [showMenuLabel, setShowMenuLabel] = useState(false)
+  const [activePage, setActivePage] = useState(0) // 0 = THE ATHLETE, 1 = THE CAREER
   // const [roomHidden, setRoomHidden] = useState(false) // ghost-table fix (unused with Cinema-Slide)
 
   const onMouseMove = useCallback(
@@ -362,18 +363,28 @@ export function BuildingInteriorPage() {
         </div>
       </motion.div>
 
-      {/* ── Foreground Layer — OUTSIDE stage, unaffected by zoom ── */}
-      {/* Table/Menu in its own layer: separate from Barkeep zoom */}
+      {/* ── Foreground Layer — OUTSIDE stage, Flexbox centering ── */}
+      {/* perspective: 1500px gives depth to 3D page flip */}
       <motion.div
         ref={foregroundScope}
         initial={{ y: '100%' }}
         style={{
           position: 'absolute',
           inset: 0,
-          pointerEvents: 'none', // Allow clicks to pass through to Barkeep
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          pointerEvents: 'none',
+          perspective: 1500,
+          perspectiveOrigin: 'center center',
         }}
       >
-        <BarSurface isNight={isNight} showMenu={showMenu} />
+        <BarSurface
+          isNight={isNight}
+          showMenu={showMenu}
+          activePage={activePage}
+          onPageChange={setActivePage}
+        />
       </motion.div>
 
       {/* ── Building label (wide only) ── */}
@@ -538,8 +549,19 @@ export function BuildingInteriorPage() {
 // 340 SVG units of visible mahogany on each side — small book on a large bar.
 //
 // Book slides in from y:-150 ONLY after hinge + zoom-out are both complete.
+// 3D Page flip: perspective 1500px, pages rotate at the spine.
 
-function BarSurface({ isNight, showMenu }: { isNight: boolean; showMenu: boolean }) {
+function BarSurface({
+  isNight,
+  showMenu,
+  activePage = 0,
+  onPageChange,
+}: {
+  isNight: boolean
+  showMenu: boolean
+  activePage?: number
+  onPageChange?: (page: number) => void
+}) {
   // ── Wood palette ──
   const MAHOGANY = isNight ? '#1e0905' : '#5C3317'
   const PLANK_DARK = isNight ? '#180704' : '#52291A'
@@ -552,41 +574,254 @@ function BarSurface({ isNight, showMenu }: { isNight: boolean; showMenu: boolean
   const VIGNETTE = isNight ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.22)'
   const RING = isNight ? 'rgba(201,169,110,0.07)' : 'rgba(78,52,46,0.09)'
 
-  // ── Book palette ──
-  const bk = isNight
-    ? {
-        cover: '#1e0e04',
-        page: 'rgba(201,169,110,0.15)', // slightly brighter page
-        spine: '#c9a96e',
-        title: '#c9a96e',
-        body: 'rgba(201,169,110,0.75)', // high contrast body text
-        accent: 'rgba(255,179,0,0.85)',
-        titleBg: 'rgba(201,169,110,0.08)',
-        shadow: 'rgba(0,0,0,0.35)',
-        separator: 'rgba(201,169,110,0.18)',
-      }
-    : {
-        cover: '#5D4037',
-        page: 'rgba(255,249,224,0.85)', // brighter page background
-        spine: '#4E342E',
-        title: '#3E2723', // darker title for contrast
-        body: 'rgba(62,39,35,0.80)', // high contrast body text
-        accent: 'rgba(100,40,10,0.90)',
-        titleBg: 'rgba(78,52,46,0.06)',
-        shadow: 'rgba(0,0,0,0.12)',
-        separator: 'rgba(78,52,46,0.15)',
-      }
+  // ── Book palette (solid colors for visibility) ──
+  const bk = {
+    cover: '#5D4037',
+    spine: '#c9a96e',
+    title: '#8B4513', // Saddle brown - very visible
+    body: '#2F1810', // Dark brown - high contrast on cream
+    accent: '#B8860B', // Dark golden rod
+    titleBg: 'rgba(139,69,19,0.15)',
+    shadow: 'rgba(0,0,0,0.2)',
+    separator: 'rgba(139,69,19,0.25)',
+  }
 
   const F = '"IBM Plex Mono", monospace'
+
+  // Book page content — extracted for HTML rendering
+  const athleteContent = (
+    <>
+      <div
+        style={{ background: bk.titleBg, padding: '4px 12px', marginBottom: 8, borderRadius: 2 }}
+      >
+        <p
+          style={{
+            margin: 0,
+            fontFamily: F,
+            fontSize: 9,
+            letterSpacing: '0.18em',
+            color: bk.title,
+            textAlign: 'center',
+            fontWeight: 600,
+          }}
+        >
+          THE ATHLETE
+        </p>
+      </div>
+      <p
+        style={{
+          margin: '0 0 4px 0',
+          fontFamily: F,
+          fontSize: 6,
+          letterSpacing: '0.08em',
+          color: bk.body,
+        }}
+      >
+        Div. III Men's Water Polo
+      </p>
+      <p
+        style={{
+          margin: '0 0 8px 0',
+          fontFamily: F,
+          fontSize: 6,
+          letterSpacing: '0.08em',
+          color: bk.body,
+        }}
+      >
+        4-Time Academic All-American
+      </p>
+      <div style={{ borderTop: `1px solid ${bk.separator}`, margin: '8px 0' }} />
+      <p
+        style={{
+          margin: '0 0 4px 0',
+          fontFamily: F,
+          fontSize: 6.5,
+          letterSpacing: '0.06em',
+          color: bk.title,
+          opacity: 0.8,
+        }}
+      >
+        CAREER STATS
+      </p>
+      {[
+        '4-Year Starter, Goalkeeper',
+        '4x Academic All-American',
+        'Conference Champion',
+        'Captain, Senior Year',
+      ].map((stat, i) => (
+        <p
+          key={i}
+          style={{
+            margin: '2px 0 2px 8px',
+            fontFamily: F,
+            fontSize: 5.8,
+            letterSpacing: '0.04em',
+            color: bk.body,
+          }}
+        >
+          {stat}
+        </p>
+      ))}
+      <div style={{ borderTop: `1px solid ${bk.separator}`, margin: '8px 0' }} />
+      <p
+        style={{
+          margin: '0 0 4px 0',
+          fontFamily: F,
+          fontSize: 6.5,
+          letterSpacing: '0.06em',
+          color: bk.title,
+          opacity: 0.8,
+        }}
+      >
+        TRAITS FORGED
+      </p>
+      {[
+        'Discipline under pressure',
+        'Team-first mentality',
+        'Relentless work ethic',
+        'Leadership by example',
+      ].map((trait, i) => (
+        <p
+          key={i}
+          style={{
+            margin: '2px 0 2px 8px',
+            fontFamily: F,
+            fontSize: 5.8,
+            letterSpacing: '0.04em',
+            color: bk.body,
+          }}
+        >
+          {trait}
+        </p>
+      ))}
+      <div style={{ borderTop: `1px solid ${bk.separator}`, margin: '8px 0' }} />
+      <p
+        style={{
+          margin: 0,
+          fontFamily: F,
+          fontSize: 5.5,
+          letterSpacing: '0.04em',
+          color: bk.accent,
+          fontStyle: 'italic',
+          lineHeight: 1.5,
+        }}
+      >
+        "The pool taught me that every pixel matters as much as every second on the clock."
+      </p>
+    </>
+  )
+
+  const careerContent = (
+    <>
+      <p
+        style={{
+          margin: '0 0 8px 0',
+          fontFamily: F,
+          fontSize: 7.5,
+          letterSpacing: '0.14em',
+          color: bk.title,
+          fontWeight: 600,
+        }}
+      >
+        THE CAREER
+      </p>
+      <p
+        style={{
+          margin: '0 0 2px 0',
+          fontFamily: F,
+          fontSize: 6,
+          letterSpacing: '0.06em',
+          color: bk.title,
+          opacity: 0.8,
+        }}
+      >
+        THE STARTUP
+      </p>
+      <p
+        style={{
+          margin: '0 0 8px 0',
+          fontFamily: F,
+          fontSize: 5.5,
+          letterSpacing: '0.06em',
+          color: bk.body,
+        }}
+      >
+        Terrapin Rewards · 1 of 2 Founders
+      </p>
+      <div style={{ borderTop: `1px solid ${bk.separator}`, margin: '0 0 8px 0' }} />
+      {[
+        'Built the entire product from zero:',
+        'UI/UX design, front-end, branding.',
+        'Pitched to investors. Won funding.',
+        'Managed dev sprints solo while',
+        'co-founder handled operations.',
+        'Learned that wearing every hat',
+        'makes you a better designer —',
+        'you understand constraints deeply.',
+      ].map((line, i) => (
+        <p
+          key={i}
+          style={{
+            margin: '1px 0 1px 8px',
+            fontFamily: F,
+            fontSize: 5.8,
+            letterSpacing: '0.04em',
+            color: bk.body,
+          }}
+        >
+          {line}
+        </p>
+      ))}
+      <div style={{ borderTop: `1px solid ${bk.separator}`, margin: '8px 0' }} />
+      <p
+        style={{
+          margin: '0 0 2px 0',
+          fontFamily: F,
+          fontSize: 6,
+          letterSpacing: '0.06em',
+          color: bk.title,
+          opacity: 0.8,
+        }}
+      >
+        THE PIVOT
+      </p>
+      <p
+        style={{
+          margin: '0 0 8px 0',
+          fontFamily: F,
+          fontSize: 5.5,
+          letterSpacing: '0.06em',
+          color: bk.body,
+        }}
+      >
+        UI/UX · Software Engineering
+      </p>
+      <div style={{ borderTop: `1px solid ${bk.separator}`, margin: '0 0 8px 0' }} />
+      {[
+        'Design systems that scale.',
+        'Interfaces that feel alive.',
+        'Code that respects the craft.',
+        'Looking for a team that ships',
+        'beautiful, purposeful software.',
+      ].map((line, i) => (
+        <p
+          key={i}
+          style={{
+            margin: '1px 0 1px 8px',
+            fontFamily: F,
+            fontSize: 5.8,
+            letterSpacing: '0.04em',
+            color: bk.body,
+          }}
+        >
+          {line}
+        </p>
+      ))}
+    </>
+  )
+
   const PLANK_H = 98
   const planks = [0, 100, 200, 300, 400, 500]
-
-  // Book in SVG viewBox units — 320 wide (32% of 1000), centred.
-  // Leaves 340 SVG units of mahogany on each side — wood visible on all 4 sides.
-  const BK_W = 320
-  const BK_H = BK_W * 0.72 // ~230
-  const BK_X = (1000 - BK_W) / 2 // 340
-  const BK_Y = (600 - BK_H) / 2 // ~185
 
   return (
     <div
@@ -621,6 +856,17 @@ function BarSurface({ isNight, showMenu }: { isNight: boolean; showMenu: boolean
           <linearGradient id="bk-curl-r" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor={bk.shadow} />
             <stop offset="100%" stopColor="transparent" />
+          </linearGradient>
+          {/* Page flip light catch — simulates light hitting page as it lifts */}
+          <linearGradient id="page-shine-0" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={isNight ? '#FFD700' : '#fff8dc'} />
+            <stop offset="50%" stopColor="transparent" />
+            <stop offset="100%" stopColor={isNight ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'} />
+          </linearGradient>
+          <linearGradient id="page-shine-1" x1="0%" y1="0%" x2="0%" y2="100%">
+            <stop offset="0%" stopColor={isNight ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.1)'} />
+            <stop offset="50%" stopColor="transparent" />
+            <stop offset="100%" stopColor={isNight ? '#FFD700' : '#fff8dc'} />
           </linearGradient>
         </defs>
 
@@ -689,327 +935,177 @@ function BarSurface({ isNight, showMenu }: { isNight: boolean; showMenu: boolean
         />
         <circle cx="140" cy="140" r="18" fill="none" stroke={RING} strokeWidth="1" />
         <circle cx="860" cy="460" r="14" fill="none" stroke={RING} strokeWidth="0.8" />
-
-        {/* ── Menu anchor ── */}
-        <g id="menu-anchor" transform="translate(500, 300)" />
-
-        {/* ══════════════════════════════════════════════════════════════════
-            BOOK — rendered in SVG viewBox units so it's immune to CSS scale.
-            Slides in from y:-150 when showMenu flips true (1.0s into hinge).
-            ══════════════════════════════════════════════════════════════════ */}
-        <g
-          transform={`translate(${BK_X}, ${showMenu ? BK_Y : BK_Y - 150})`}
-          opacity={showMenu ? 1 : 0}
-          style={{
-            transition: `transform ${TRANSITION_SETTINGS.menuSlideDur}s cubic-bezier(0.45, 0, 0.55, 1), opacity ${TRANSITION_SETTINGS.menuSlideDur * 0.6}s ease`,
-          }}
-        >
-          {/* Scale the 460×332 book viewBox to fit in BK_W×BK_H */}
-          <g transform={`scale(${BK_W / 460}, ${BK_H / 332})`}>
-            {/* Drop shadow */}
-            <rect
-              x="8"
-              y="12"
-              width="444"
-              height="316"
-              rx="6"
-              fill={isNight ? 'rgba(0,0,0,0.50)' : 'rgba(0,0,0,0.15)'}
-              style={{ filter: 'blur(8px)' }}
-            />
-
-            {/* Cover */}
-            <rect
-              x="4"
-              y="4"
-              width="452"
-              height="324"
-              rx="4"
-              fill={bk.cover}
-              stroke={bk.spine}
-              strokeWidth="1.5"
-            />
-
-            {/* Pages */}
-            <rect x="12" y="12" width="214" height="308" rx="2" fill={bk.page} />
-            <rect x="234" y="12" width="214" height="308" rx="2" fill={bk.page} />
-
-            {/* Spine + curl shadows */}
-            <line
-              x1="230"
-              y1="8"
-              x2="230"
-              y2="324"
-              stroke={bk.spine}
-              strokeWidth="1.5"
-              strokeOpacity="0.4"
-            />
-            <rect x="212" y="12" width="18" height="308" fill="url(#bk-curl-l)" />
-            <rect x="230" y="12" width="18" height="308" fill="url(#bk-curl-r)" />
-
-            {/* ── LEFT PAGE — THE ATHLETE ── */}
-            <rect x="24" y="20" width="190" height="26" rx="1" fill={bk.titleBg} />
-            <text
-              x="119"
-              y="38"
-              textAnchor="middle"
-              fill={bk.title}
-              fontFamily={F}
-              fontSize="9"
-              letterSpacing="0.18em"
-              fontWeight="600"
-            >
-              THE ATHLETE
-            </text>
-
-            <text x="24" y="60" fill={bk.body} fontFamily={F} fontSize="6" letterSpacing="0.08em">
-              Div. III Men's Water Polo
-            </text>
-            <text x="24" y="72" fill={bk.body} fontFamily={F} fontSize="6" letterSpacing="0.08em">
-              4-Time Academic All-American
-            </text>
-            <line x1="24" y1="80" x2="210" y2="80" stroke={bk.separator} strokeWidth="0.6" />
-
-            <text
-              x="24"
-              y="96"
-              fill={bk.title}
-              fontFamily={F}
-              fontSize="6.5"
-              letterSpacing="0.06em"
-              opacity="0.8"
-            >
-              CAREER STATS
-            </text>
-
-            {(
-              [
-                [110, '4-Year Starter, Goalkeeper'],
-                [124, '4x Academic All-American'],
-                [138, 'Conference Champion'],
-                [152, 'Captain, Senior Year'],
-              ] as [number, string][]
-            ).map(([y, line]) => (
-              <text
-                key={y}
-                x="28"
-                y={y}
-                fill={bk.body}
-                fontFamily={F}
-                fontSize="5.8"
-                letterSpacing="0.04em"
-              >
-                {line}
-              </text>
-            ))}
-
-            <line x1="24" y1="164" x2="140" y2="164" stroke={bk.separator} strokeWidth="0.6" />
-
-            <text
-              x="24"
-              y="180"
-              fill={bk.title}
-              fontFamily={F}
-              fontSize="6.5"
-              letterSpacing="0.06em"
-              opacity="0.8"
-            >
-              TRAITS FORGED
-            </text>
-
-            {(
-              [
-                [194, 'Discipline under pressure'],
-                [208, 'Team-first mentality'],
-                [222, 'Relentless work ethic'],
-                [236, 'Leadership by example'],
-              ] as [number, string][]
-            ).map(([y, line]) => (
-              <text
-                key={y}
-                x="28"
-                y={y}
-                fill={bk.body}
-                fontFamily={F}
-                fontSize="5.8"
-                letterSpacing="0.04em"
-              >
-                {line}
-              </text>
-            ))}
-
-            <line x1="24" y1="248" x2="140" y2="248" stroke={bk.separator} strokeWidth="0.6" />
-
-            <text
-              x="24"
-              y="266"
-              fill={bk.accent}
-              fontFamily={F}
-              fontSize="5.5"
-              letterSpacing="0.04em"
-              fontStyle="italic"
-            >
-              "The pool taught me that
-            </text>
-            <text
-              x="24"
-              y="278"
-              fill={bk.accent}
-              fontFamily={F}
-              fontSize="5.5"
-              letterSpacing="0.04em"
-              fontStyle="italic"
-            >
-              {' '}
-              every pixel matters as much
-            </text>
-            <text
-              x="24"
-              y="290"
-              fill={bk.accent}
-              fontFamily={F}
-              fontSize="5.5"
-              letterSpacing="0.04em"
-              fontStyle="italic"
-            >
-              {' '}
-              as every second on the clock."
-            </text>
-
-            {/* ── RIGHT PAGE — THE CAREER ── */}
-            <text
-              x="246"
-              y="30"
-              fill={bk.title}
-              fontFamily={F}
-              fontSize="7.5"
-              letterSpacing="0.14em"
-              fontWeight="600"
-            >
-              THE CAREER
-            </text>
-
-            <text
-              x="246"
-              y="48"
-              fill={bk.title}
-              fontFamily={F}
-              fontSize="6"
-              letterSpacing="0.06em"
-              opacity="0.8"
-            >
-              THE STARTUP
-            </text>
-            <text
-              x="246"
-              y="60"
-              fill={bk.body}
-              fontFamily={F}
-              fontSize="5.5"
-              letterSpacing="0.06em"
-            >
-              Terrapin Rewards · 1 of 2 Founders
-            </text>
-            <line x1="246" y1="68" x2="432" y2="68" stroke={bk.separator} strokeWidth="0.6" />
-
-            {(
-              [
-                [82, 'Built the entire product from zero:'],
-                [96, 'UI/UX design, front-end, branding.'],
-                [114, 'Pitched to investors. Won funding.'],
-                [128, 'Managed dev sprints solo while'],
-                [142, 'co-founder handled operations.'],
-                [160, 'Learned that wearing every hat'],
-                [174, 'makes you a better designer —'],
-                [188, 'you understand constraints deeply.'],
-              ] as [number, string][]
-            ).map(([y, line]) => (
-              <text
-                key={y}
-                x="250"
-                y={y}
-                fill={bk.body}
-                fontFamily={F}
-                fontSize="5.8"
-                letterSpacing="0.04em"
-              >
-                {line}
-              </text>
-            ))}
-
-            <line x1="246" y1="202" x2="360" y2="202" stroke={bk.separator} strokeWidth="0.6" />
-
-            <text
-              x="246"
-              y="218"
-              fill={bk.title}
-              fontFamily={F}
-              fontSize="6"
-              letterSpacing="0.06em"
-              opacity="0.8"
-            >
-              THE PIVOT
-            </text>
-            <text
-              x="246"
-              y="230"
-              fill={bk.body}
-              fontFamily={F}
-              fontSize="5.5"
-              letterSpacing="0.06em"
-            >
-              UI/UX · Software Engineering
-            </text>
-            <line x1="246" y1="238" x2="432" y2="238" stroke={bk.separator} strokeWidth="0.6" />
-
-            {(
-              [
-                [252, 'Design systems that scale.'],
-                [266, 'Interfaces that feel alive.'],
-                [280, 'Code that respects the craft.'],
-                [298, 'Looking for a team that ships'],
-                [312, 'beautiful, purposeful software.'],
-              ] as [number, string][]
-            ).map(([y, line]) => (
-              <text
-                key={y}
-                x="250"
-                y={y}
-                fill={bk.body}
-                fontFamily={F}
-                fontSize="5.8"
-                letterSpacing="0.04em"
-              >
-                {line}
-              </text>
-            ))}
-
-            {/* Corner ornaments */}
-            {(
-              [
-                [16, 16],
-                [220, 16],
-                [16, 316],
-                [220, 316],
-                [238, 16],
-                [440, 16],
-                [238, 316],
-                [440, 316],
-              ] as [number, number][]
-            ).map(([ox, oy]) => (
-              <circle
-                key={`${ox}-${oy}`}
-                cx={ox}
-                cy={oy}
-                r="2"
-                fill="none"
-                stroke={bk.spine}
-                strokeWidth="0.5"
-                strokeOpacity="0.25"
-              />
-            ))}
-          </g>
-        </g>
       </svg>
+
+      {/* ═══════════════════════════════════════════════════════════════════════
+          3D BOOK — Fixed 500×350px Golden Ratio
+          ═══════════════════════════════════════════════════════════════════════ */}
+
+      {/* ══ 3D Book ══ */}
+      {(() => {
+        const GOLD = '#d4af37'
+        const PAGE_BG = '#f5f0e0'
+        return (
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              transform: 'translate(-50%, -50%)',
+              width: 500,
+              height: 350,
+              perspective: 1500,
+              opacity: showMenu ? 1 : 0,
+              transition: `opacity ${TRANSITION_SETTINGS.menuSlideDur * 0.6}s ease`,
+            }}
+          >
+            {/* BOOK SHELL */}
+            <div
+              style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                background: bk.cover,
+                border: `2px solid ${bk.spine}`,
+                borderRadius: 4,
+                boxShadow: isNight ? '0 8px 32px rgba(0,0,0,0.6)' : '0 4px 16px rgba(0,0,0,0.15)',
+                overflow: 'visible',
+                transformStyle: 'preserve-3d',
+              }}
+            >
+              {/* LAYER 1: LEFT UNDERLAY (Inside Cover) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '50%',
+                  height: '100%',
+                  background: '#e8e0d0',
+                  zIndex: 1,
+                  transform: 'translateZ(-5px)',
+                }}
+              />
+
+              {/* LAYER 2: RIGHT UNDERLAY (Static Floor - THE CAREER) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: '50%',
+                  width: '50%',
+                  height: '100%',
+                  background: PAGE_BG,
+                  padding: 25,
+                  boxSizing: 'border-box',
+                  zIndex: 1,
+                  transform: 'translateZ(-5px)',
+                  display: 'block',
+                  opacity: 1,
+                  border: '2px solid blue',
+                }}
+              >
+                {careerContent}
+              </div>
+
+              {/* LAYER 3: FLIPPER (Moving Page) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: '50%',
+                  width: '50%',
+                  height: '100%',
+                  transformOrigin: 'left center',
+                  transitionProperty: 'transform',
+                  transitionDuration: '0.8s',
+                  transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+                  transform: 'rotateY(' + (activePage === 0 ? 0 : -180) + 'deg) translateZ(0px)',
+                  transformStyle: 'preserve-3d',
+                  zIndex: 10,
+                  pointerEvents: 'none',
+                }}
+              >
+                {/* FRONT - THE ATHLETE */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    background: PAGE_BG,
+                    padding: 25,
+                    boxSizing: 'border-box',
+                    backfaceVisibility: 'hidden',
+                    borderLeft: `2px solid ${GOLD}`,
+                  }}
+                >
+                  {athleteContent}
+                </div>
+
+                {/* BACK - blank */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    background: PAGE_BG,
+                    backfaceVisibility: 'hidden',
+                    transform: 'rotateY(180deg)',
+                  }}
+                />
+              </div>
+
+              {/* SPINE */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: '50%',
+                  width: 4,
+                  height: '100%',
+                  transform: 'translateX(-50%)',
+                  background: 'linear-gradient(90deg, rgba(0,0,0,0.3), rgba(0,0,0,0.1))',
+                  zIndex: 15,
+                }}
+              />
+
+              {/* HITBOXES (z-index: 999 for click detection) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '50%',
+                  height: '100%',
+                  zIndex: 999,
+                  cursor: 'pointer',
+                  pointerEvents: 'auto',
+                  background: 'rgba(255, 0, 0, 0.2)',
+                }}
+                onClick={() => onPageChange?.(0)}
+              />
+              <div
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: '50%',
+                  width: '50%',
+                  height: '100%',
+                  zIndex: 999,
+                  cursor: 'pointer',
+                  pointerEvents: 'auto',
+                  background: 'rgba(0, 255, 0, 0.2)',
+                }}
+                onClick={() => onPageChange?.(1)}
+              />
+            </div>
+          </div>
+        )
+      })()}
     </div>
   )
 }
