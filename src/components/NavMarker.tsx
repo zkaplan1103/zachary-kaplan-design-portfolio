@@ -2,19 +2,17 @@ import { motion } from 'framer-motion'
 
 // ─── Label map ────────────────────────────────────────────────────────────────
 export const NAV_LABELS: Record<string, string> = {
-  saloon:    'About',
-  sheriff:   'Experience',
-  bank:      'Projects',
-  general:   'Skills',
+  saloon: 'About',
+  sheriff: 'Experience',
+  bank: 'Projects',
   telegraph: 'Contact',
 }
 
 // ─── Staggered bob delays ─────────────────────────────────────────────────────
 const BOB_DELAYS: Record<string, number> = {
-  saloon:    0,
-  sheriff:   0.7,
-  bank:      1.4,
-  general:   0.35,
+  saloon: 0,
+  sheriff: 0.7,
+  bank: 1.4,
   telegraph: 1.05,
 }
 
@@ -27,10 +25,10 @@ const BOB_DELAYS: Record<string, number> = {
 
 export interface NavMarkerProps {
   buildingId: string
-  cx:         number   // centre x of building in screen px (with parallax baked in)
-  roofY:      number   // y of roofline in screen px
-  isHovered:  boolean
-  isNight:    boolean
+  cx: number // centre x of building in screen px (with parallax baked in)
+  roofY: number // y of roofline in screen px
+  isHovered: boolean
+  isNight: boolean
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
@@ -42,7 +40,7 @@ export function NavMarker({ buildingId, cx, roofY, isHovered, isNight }: NavMark
   const label = NAV_LABELS[buildingId]
   if (!label) return null
 
-  const delay     = BOB_DELAYS[buildingId] ?? 0
+  const delay = BOB_DELAYS[buildingId] ?? 0
   const textColor = isNight ? '#FFFFFF' : '#000000'
   const hoverFilter = isNight
     ? 'drop-shadow(0 0 6px rgba(255,255,255,0.8))'
@@ -53,39 +51,39 @@ export function NavMarker({ buildingId, cx, roofY, isHovered, isNight }: NavMark
       // Bob loop — y relative to own position
       animate={{ y: [0, -8, 0] }}
       transition={{
-        duration:    3,
-        ease:        'easeInOut',
-        repeat:      Infinity,
+        duration: 3,
+        ease: 'easeInOut',
+        repeat: Infinity,
         delay,
         repeatDelay: 0,
       }}
       style={{
-        position:      'absolute',
-        left:          cx,
-        top:           roofY - 30,      // 30px above roofline
-        transform:     'translateX(-50%)',
+        position: 'absolute',
+        left: cx,
+        top: roofY - 30, // 30px above roofline
+        transform: 'translateX(-50%)',
         pointerEvents: 'none',
-        zIndex:        100,
+        zIndex: 100,
       }}
     >
       <motion.span
         animate={{
-          scale:  isHovered ? 1.1 : 1,
+          scale: isHovered ? 1.1 : 1,
           filter: isHovered ? hoverFilter : 'none',
-          color:  textColor,
+          color: textColor,
         }}
         transition={{ duration: 0.25, ease: 'easeOut' }}
         style={{
-          display:       'block',
-          fontFamily:    '"IBM Plex Mono", monospace',
-          fontSize:      9,
-          fontWeight:    600,
+          display: 'block',
+          fontFamily: '"IBM Plex Mono", monospace',
+          fontSize: 9,
+          fontWeight: 600,
           letterSpacing: '0.22em',
           textTransform: 'uppercase',
-          color:         textColor,
-          whiteSpace:    'nowrap',
-          userSelect:    'none',
-          transition:    'color 1.5s',
+          color: textColor,
+          whiteSpace: 'nowrap',
+          userSelect: 'none',
+          transition: 'color 1.5s',
         }}
       >
         {label}

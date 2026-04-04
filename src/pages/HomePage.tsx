@@ -31,7 +31,7 @@ export function HomePage() {
             transition={{ duration: 1.2, ease: [0.2, 0, 0.6, 1] }}
             style={{ position: 'absolute', inset: 0 }}
           >
-            <WesternTown entryBuilding={fromBuilding} />
+            <WesternTown />
           </motion.div>
 
           {/* Return fade: when navigating back from a building interior,
@@ -43,11 +43,11 @@ export function HomePage() {
               animate={{ opacity: 0 }}
               transition={{ duration: 0.5, ease: 'easeOut' }}
               style={{
-                position:        'absolute',
-                inset:           0,
-                zIndex:          55,
+                position: 'absolute',
+                inset: 0,
+                zIndex: 55,
                 backgroundColor: '#000000',
-                pointerEvents:   'none',
+                pointerEvents: 'none',
               }}
             />
           )}
