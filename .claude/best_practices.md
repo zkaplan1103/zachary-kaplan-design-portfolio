@@ -160,6 +160,17 @@ const FOREGROUND_SCALE = 1 / SEATED_SCALE // deprecated
 
 ---
 
+## `[TOWN_LOGIC]` `[TOWN_PIXEL_ART]` — buildingInfo as Single Source of Truth (2026-04-06)
+
+**PATTERN: All building-derived positions (NavMarkers AND DistrictGuide cowboys) read from `buildingInfo`. Fixing cx there fixes both simultaneously.**
+
+1. **`buildingInfo` is the single coordinate source** for everything that must track a building — NavMarker labels (`cx`, `roofY`) and DistrictGuide home positions (`cx - bw/2 - 20`) both derive from it
+2. **Building width formula** — `bldg.w * scale %` is a % of the *district container*, not of `sw`. Correct: `bw = (bldg.w * scale / 100) * containerW_px` where `containerW_px = rawSumW * scale / 100 * sw`
+3. **roofY in pixel art** — container bottom is at `sh * 0.13` from screen bottom = `sh * 0.87` from top, buildings scale 1.96×. Formula: `roofY = sh * 0.87 - sh * bldg.hPct * 1.96`
+4. **Consequence**: any time pixel art building anchor (`left: 10%` / `left: 68%`) or scale changes, update `buildingInfo` constants (`DISTRICT_A_LEFT`, `DISTRICT_B_LEFT`, `bldgScale`) — all downstream label and guide positions auto-correct
+
+---
+
 ## `[BUILDING_INTERIOR]` — 3D CSS Book Flip (2026-04-05)
 
 **SUCCESS: rotateY page flip with backfaceVisibility + z:999 hitboxes**

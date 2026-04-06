@@ -23,6 +23,7 @@ import bankClosedPng from '@/assets/images/town/bank-closed.png'
 import bankOpenPng from '@/assets/images/town/bank-open.png'
 import contactClosedPng from '@/assets/images/town/contact-closed.png'
 import contactOpenPng from '@/assets/images/town/contact-open.png'
+import titlecardPng from '@/assets/images/town/titlecard.png'
 
 const BUILDING_IMAGES: Record<string, { closed: string; open: string }> = {
   saloon: { closed: saloonClosedPng, open: saloonOpenPng },
@@ -176,7 +177,10 @@ export function WesternTown() {
   const palette = isNight ? NIGHT : DAY
 
   // Grid dimensions (2:1 aspect, capped at 80% screen width for mobile)
-  const gridNatural = sh * 0.26 * 2.1
+  // Pixel art mode uses a larger height driver (0.38 vs 0.26) — PNG titlecard needs more presence.
+  // objectFit:contain on the PNG preserves its native aspect ratio within the box.
+  const gridHeightDriver = isPixelArt ? 0.38 : 0.26
+  const gridNatural = sh * gridHeightDriver * 2.1
   const gridWidth = Math.min(gridNatural, sw * 0.8)
   const gridHeight = gridWidth / 2.1
   const gridCapped = gridNatural > sw * 0.8
@@ -655,6 +659,20 @@ export function WesternTown() {
             pointerEvents: 'none',
           }}
         >
+          {isPixelArt ? (
+            <img
+              src={titlecardPng}
+              alt="ZK"
+              draggable={false}
+              style={{
+                width: gridWidth,
+                height: gridHeight,
+                objectFit: 'contain',
+                imageRendering: 'pixelated',
+                userSelect: 'none',
+              }}
+            />
+          ) : (
           <div
             style={{
               width: gridWidth,
@@ -705,6 +723,7 @@ export function WesternTown() {
               </h1>
             </div>
           </div>
+          )}
 
           <p
             style={{
