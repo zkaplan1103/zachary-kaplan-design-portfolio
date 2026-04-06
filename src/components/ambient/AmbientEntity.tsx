@@ -26,7 +26,7 @@ export interface CharacterDef {
 export const CHARACTER_MANIFEST: CharacterDef[] = [
   {
     id: 'HORSE_WAGON',
-    yPct: 0.895,    // sits just above ground line
+    yPct: 0.905,    // ground line — matches COWBOY_WALK
     speed: 14,
     scale: 1.0,
     color: '#c9a96e',
@@ -46,7 +46,7 @@ export const CHARACTER_MANIFEST: CharacterDef[] = [
   },
   {
     id: 'NIGHT_RIDER',
-    yPct: 0.88,
+    yPct: 0.905,
     speed: 10,
     scale: 1.1,
     nightOnly: true,
@@ -57,7 +57,7 @@ export const CHARACTER_MANIFEST: CharacterDef[] = [
   },
   {
     id: 'BANK_ROBBER',
-    yPct: 0.908,
+    yPct: 0.905,
     speed: 18,
     scale: 0.9,
     nightOnly: true,

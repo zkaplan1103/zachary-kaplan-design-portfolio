@@ -20,7 +20,7 @@ The SVG layout IS the coordinate system. When adding pixel art mode, every PNG e
 | Ground (road) | `0` | SVG: `sh * 0.10` / PNG: `sh * 0.18` | PNG road is taller to show full dirt surface |
 | Building base | SVG: `sh * 0.10` / PNG: `sh * 0.13` | `sh * 0.28` (container) / `sh * bldg.hPct` (individual) | PNG: overlaps road by sh*0.05, landing in dark shadow zone |
 | Mesa base | SVG: `sh * 0.10` / PNG: `sh * 0.18` | `sh * 0.35` | Matches road top anchor |
-| Cowboys | `yPct * sh - scaledH + yOffset` | per character | SVG: yOffset=0 / PNG: yOffset=`sh * -0.08` (moves up) |
+| Cowboys | `yPct * sh - scaledH + yOffset` | per character | SVG: yOffset=0 / PNG: yOffset=`sh * -0.065` — feet land at sh*0.84 from top (dark/light road boundary) |
 | Tumbleweeds | `sh * 0.105` | 16px / 12px | Slightly above SVG road surface |
 
 ### Building hPct values (per-building heights, `bHeight = sh * hPct`)
@@ -36,10 +36,10 @@ The SVG layout IS the coordinate system. When adding pixel art mode, every PNG e
 
 | Character | yPct | Notes |
 |---|---|---|
-| HORSE_WAGON | 0.895 | Sits just above ground line |
-| COWBOY_WALK | 0.905 | |
-| NIGHT_RIDER | 0.880 | Slightly higher (horse gallop) |
-| BANK_ROBBER | 0.908 | |
+| HORSE_WAGON | 0.905 | Unified ground line |
+| COWBOY_WALK | 0.905 | Reference — visually correct |
+| NIGHT_RIDER | 0.905 | Unified ground line |
+| BANK_ROBBER | 0.905 | Unified ground line |
 
 ---
 
@@ -55,7 +55,7 @@ Both SVG and PNG modes share the same container positions. PNG img tags use obje
 | **Mesa** | SVG: `sh * 0.10` / PNG: `sh * 0.18` | **`sh * 0.35`** | **`160%, left:-30%`** | **14** | SVG path / PNG: `<img>` | fill | — |
 | **Title card** | — | — | — | **35** | — | — | — |
 | **Buildings container** | SVG: `sh * 0.10` / PNG: `sh * 0.13` | **`sh * 0.28`** | per district % | **30** | SVG divs / PNG: `<img>` | cover | bottom |
-| Ambient characters | yPct + yOffset (SVG:0 / PNG:`sh*-0.08`) | per char | — | **20** | SVG shapes | — | — |
+| Ambient characters | yPct + yOffset (SVG:0 / PNG:`sh*-0.065`) | per char | — | **20** | SVG shapes | — | — |
 | Tumbleweeds | `sh * 0.105` / `sh * 0.10` | 16px / 12px | — | **32** | — | — | — |
 | **Road** | **`0`** | SVG: `sh * 0.10` / PNG: `sh * 0.18` | **`160%, left:-30%`** | **15** | SVG gradient / PNG: `<img height:200%>` | — | — |
 | Nav labels overlay | inset:0 | — | — | **100** | — | — | — |

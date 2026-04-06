@@ -741,7 +741,7 @@ export function WesternTown() {
             sh={sh}
             direction={direction}
             onComplete={handleEntityComplete}
-            yOffset={isPixelArt ? sh * -0.08 : 0}
+            yOffset={isPixelArt ? sh * -0.065 : 0}
           />
         ))}
 
