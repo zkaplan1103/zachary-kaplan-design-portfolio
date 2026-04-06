@@ -745,14 +745,14 @@ export function WesternTown() {
           { district: DISTRICT_A, anchor: { left: '2%' } },
           { district: DISTRICT_B, anchor: { right: '2%' } },
         ].map(({ district, anchor }) => {
-          const scale = isPixelArt ? 1.3 : 1
+          const scale = isPixelArt ? 1.96 : 1
           return (
             <motion.div
               key={JSON.stringify(anchor)}
               style={{
                 position: 'absolute',
                 bottom: isPixelArt ? sh * 0.13 : sh * 0.1,
-                height: isPixelArt ? sh * 0.36 : sh * 0.28,
+                height: isPixelArt ? sh * 0.55 : sh * 0.28,
                 width: `${(district.reduce((acc, b) => acc + b.w, 0) + (district.length - 1) * 0.8) * scale}%`,
                 ...anchor,
                 display: 'flex',
