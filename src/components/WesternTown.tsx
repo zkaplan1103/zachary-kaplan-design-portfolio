@@ -742,8 +742,8 @@ export function WesternTown() {
 
         {/* ═══════ z:30 — BUILDINGS — District A (left) + Stage gap + District B (right) ═══════ */}
         {[
-          { district: DISTRICT_A, anchor: { left: '2%' } },
-          { district: DISTRICT_B, anchor: { right: '2%' } },
+          { district: DISTRICT_A, anchor: isPixelArt ? { left: '10%' } : { left: '2%' } },
+          { district: DISTRICT_B, anchor: isPixelArt ? { left: '68%' } : { right: '2%' } },
         ].map(({ district, anchor }) => {
           const scale = isPixelArt ? 1.96 : 1
           return (
