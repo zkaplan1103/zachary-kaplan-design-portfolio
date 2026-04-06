@@ -189,27 +189,40 @@ export function WesternTown() {
 
   const buildingInfo = (() => {
     const map: Record<string, { cx: number; bw: number; hPct: number }> = {}
+    const bldgScale = isPixelArt ? 1.96 : 1
+    // Gap between buildings inside the container (same formula as the flex gap in the DOM)
+    const districtGapPx = sw * 0.006 * bldgScale
 
-    // District A: container left = sw*0.02
-    const aContainerPct = DISTRICT_A.reduce((s, b) => s + b.w, 0) + (DISTRICT_A.length - 1) * 0.8
-    const aContainerW = (sw * aContainerPct) / 100
-    const aContainerL = sw * 0.02
-    let cursor = aContainerL
-    for (const bldg of DISTRICT_A) {
-      const bw = (bldg.w / 100) * aContainerW
-      map[bldg.id] = { cx: cursor + bw / 2, bw, hPct: bldg.hPct }
-      cursor += bw + GAP_PX
+    // Container anchor positions — must match the CSS anchors applied to each district container
+    const DISTRICT_A_LEFT = isPixelArt ? 0.10 : 0.02   // fraction of sw (left edge of container)
+    const DISTRICT_B_LEFT = isPixelArt ? 0.68 : null    // pixel art: absolute left fraction
+
+    // Helper: compute container pixel width and walk cx for each building in a district
+    const processDistrict = (buildings: typeof DISTRICT_A, containerLeftPx: number) => {
+      // Container CSS: width = (sumW + gaps) * scale % of sw
+      const rawSumW = buildings.reduce((s, b) => s + b.w, 0) + (buildings.length - 1) * 0.8
+      const containerW = rawSumW * bldgScale / 100 * sw
+
+      // Individual building CSS: width = bldg.w * scale % of the CONTAINER (not of sw)
+      // So bw_px = (bldg.w * scale / 100) * containerW
+      let cursor = containerLeftPx
+      for (const bldg of buildings) {
+        const bw = (bldg.w * bldgScale / 100) * containerW
+        map[bldg.id] = { cx: cursor + bw / 2, bw, hPct: bldg.hPct }
+        cursor += bw + districtGapPx
+      }
     }
 
-    // District B: container right = sw*0.98
-    const bContainerPct = DISTRICT_B.reduce((s, b) => s + b.w, 0) + (DISTRICT_B.length - 1) * 0.8
-    const bContainerW = (sw * bContainerPct) / 100
-    const bContainerL = sw * 0.98 - bContainerW
-    cursor = bContainerL
-    for (const bldg of DISTRICT_B) {
-      const bw = (bldg.w / 100) * bContainerW
-      map[bldg.id] = { cx: cursor + bw / 2, bw, hPct: bldg.hPct }
-      cursor += bw + GAP_PX
+    // District A — anchor is left edge at DISTRICT_A_LEFT fraction of sw
+    processDistrict(DISTRICT_A, sw * DISTRICT_A_LEFT)
+
+    // District B — pixel art: absolute left; SVG: right:2% means containerLeft = sw - 0.02*sw - containerW
+    if (isPixelArt) {
+      processDistrict(DISTRICT_B, sw * (DISTRICT_B_LEFT as number))
+    } else {
+      const bRawSumW = DISTRICT_B.reduce((s, b) => s + b.w, 0) + (DISTRICT_B.length - 1) * 0.8
+      const bContainerW = bRawSumW * bldgScale / 100 * sw
+      processDistrict(DISTRICT_B, sw * 0.98 - bContainerW)
     }
 
     return map
@@ -1041,7 +1054,13 @@ export function WesternTown() {
           {[...DISTRICT_A, ...DISTRICT_B].map((bldg) => {
             const info = buildingInfo[bldg.id]
             if (!info) return null
-            const roofY = sh * 0.9 - sh * bldg.hPct // sh*0.90 = ground top; roofline = ground - building height
+            // roofY: distance from screen top to the building's roofline
+            // SVG:       ground top at sh*0.90 (container bottom sh*0.10 from screen bottom)
+            // Pixel art: container bottom at sh*0.13 → top of container at sh - sh*0.13 = sh*0.87
+            //            building height = sh * hPct * 1.96
+            const roofY = isPixelArt
+              ? sh * 0.87 - sh * bldg.hPct * 1.96
+              : sh * 0.9 - sh * bldg.hPct
             return (
               <NavMarker
                 key={bldg.id}
