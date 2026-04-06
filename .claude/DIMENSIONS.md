@@ -28,7 +28,7 @@ All PNGs live in `src/assets/images/town/`.
 ### Key Takeaways
 
 - **road.png** only has visual content in the **top 50%**. Fix: use `<img height="200%">` inside an `overflow:hidden` container + `objectFit: cover` + `objectPosition: top`. This fills the container with road texture only.
-- **mesa.png** has 34% transparent sky above the peaks and 19.6% transparent ground below. Current code uses `objectFit: fill` — acceptable since container size is calibrated. Alternative: `cover` + `objectPosition: bottom center` to anchor base.
+- **mesa.png** has 34% transparent sky above the peaks and 19.6% transparent ground below. Native ratio 2.024:1. Container is ~5:1 (160% sw wide) so `fill` stretches/flattens peaks. Use `objectFit: cover` + `objectPosition: bottom center` to preserve aspect ratio and anchor base. Container bottom offset = `height * 0.196` below road top to compensate for transparent base padding.
 - **Building PNGs** have ~4% bottom padding on average. Current code uses `objectFit: cover` + `objectPosition: bottom` — clips any top transparent area.
 - **sky.png** has 12% transparent bottom. Use `objectFit: cover` + `objectPosition: center top` to fill container without showing transparent strip.
 - **contact/telegraph** is dramatically shorter content (41% top padding) — PNG scales to container via `objectFit: cover`.
@@ -95,9 +95,9 @@ Mesa (z:14) < Road (z:15): road covers mesa base at horizon.
 | Stars | top:0, bottom:0 | — | 160% | -30% | — | — |
 | Moon (night) | top: 8% | `sw * 0.035` | `sw * 0.035` | right: 12% | contain | — |
 | Sun (day) | top: 6% | `sw * 0.045` | `sw * 0.045` | right: 10% | contain | — |
-| Mesa | `sh * 0.10` | `sh * 0.35` | 160% | -30% | fill | — |
-| Buildings container | `sh * 0.10` | `sh * 0.28` | per district | 2% / right:2% | — | — |
-| Building img | bottom:0 | `sh * bldg.hPct` | `bldg.w %` | — | cover | bottom |
+| Mesa | `sh * 0.18 - height * 0.196` = `sh * 0.047` ✅ | `sh * 0.68` ✅ | 160% | -30% | background-repeat:repeat-x backgroundSize:auto sh*0.68 backgroundPosition:left bottom | **CRITICAL: bottom = sh*0.18 - height*0.196. If height changes, recalculate bottom or base drifts. Never change height without updating bottom.** |
+| Buildings container | SVG: `sh * 0.10` / PNG: `sh * 0.13` ✅ | SVG: `sh * 0.28` / PNG: `sh * 0.42` | per district | 2% / right:2% | — | — |
+| Building img | bottom:0 | SVG: `sh * hPct` / PNG: `sh * hPct * 1.5` | `bldg.w %` | — | cover | bottom |
 | Road | `0` | `sh * 0.10` | 160% | -30% | — | — |
 | Road img | — | 200% | 100% | — | cover | top |
 | Cowboys | computed | per char | per char | — | — | — |

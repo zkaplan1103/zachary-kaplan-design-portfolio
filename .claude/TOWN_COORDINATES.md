@@ -18,8 +18,8 @@ The SVG layout IS the coordinate system. When adding pixel art mode, every PNG e
 | Element | bottom | height | Notes |
 |---|---|---|---|
 | Ground (road) | `0` | SVG: `sh * 0.10` / PNG: `sh * 0.18` | PNG road is taller to show full dirt surface |
-| Building base | SVG: `sh * 0.10` / PNG: `sh * 0.13` | `sh * 0.28` (container) / `sh * bldg.hPct` (individual) | PNG: overlaps road by sh*0.05, landing in dark shadow zone |
-| Mesa base | SVG: `sh * 0.10` / PNG: `sh * 0.18` | `sh * 0.35` | Matches road top anchor |
+| Building base | SVG: `sh * 0.10` / PNG: `sh * 0.13` ✅ LOCKED | SVG: `sh * 0.28` (container) / PNG: `sh * 0.42` (container). Individual: `sh * hPct * 1.5` in PNG mode | **base stays locked via alignItems:flex-end — changing height never moves base. To resize PNG buildings: change height multiplier (1.5) only. Do NOT touch bottom.** |
+| Mesa base | SVG: `sh * 0.10` / PNG: `sh * 0.18 - height * 0.196` ✅ FORMULA | SVG: `sh * 0.35` / PNG: `sh * 0.68` ✅ LOCKED | PNG: background-repeat:repeat-x, backgroundSize:auto sh*0.68, backgroundPosition:left bottom. **CRITICAL: bottom = sh*0.18 - height*0.196. Increasing height MUST recalculate bottom or base drifts up.** |
 | Cowboys | `yPct * sh - scaledH + yOffset` | per character | SVG: yOffset=0 / PNG: yOffset=`sh * -0.065` — feet land at sh*0.84 from top (dark/light road boundary) |
 | Tumbleweeds | `sh * 0.105` | 16px / 12px | Slightly above SVG road surface |
 
@@ -51,10 +51,10 @@ Both SVG and PNG modes share the same container positions. PNG img tags use obje
 |---|---|---|---|---|---|---|---|
 | Sky | `top:0, bottom:0` | 100% | `160%, left:-30%` | **10** | SVG: gradient / PNG: `<img>` | cover | center top |
 | Stars | `top:0, bottom:0` | — | `160%, left:-30%` | **11** | SVG dots | — | — |
-| Moon / Sun | `top: 8%/6%` | `sw*0.035 / sw*0.045` | auto, right:12%/10% | **12** | SVG glow / PNG: `<img>` | contain | — |
-| **Mesa** | SVG: `sh * 0.10` / PNG: `sh * 0.18` | **`sh * 0.35`** | **`160%, left:-30%`** | **14** | SVG path / PNG: `<img>` | fill | — |
+| Moon / Sun | PNG: `calc(8% - size*0.293)` night / `calc(6% - size*0.293)` day | PNG: `sw*0.32` night / `sw*0.40` day | right: `calc(12% - size*0.325)` | **12** | SVG glow / PNG: `<img>` contain | — | **CRITICAL: top/right must subtract padding offsets (top:29.3%, right:32.5%) when resizing or moon drifts. Formula: top = desired% - containerSize*0.293** |
+| **Mesa** | SVG: `sh * 0.10` / PNG: `sh * 0.047` (= sh*0.18 - sh*0.68*0.196) ✅ | SVG: `sh * 0.35` / PNG: `sh * 0.68` ✅ | **`160%, left:-30%`** | **14** | SVG path / PNG: `background-repeat:repeat-x` | — | left bottom |
 | **Title card** | — | — | — | **35** | — | — | — |
-| **Buildings container** | SVG: `sh * 0.10` / PNG: `sh * 0.13` | **`sh * 0.28`** | per district % | **30** | SVG divs / PNG: `<img>` | cover | bottom |
+| **Buildings container** | SVG: `sh * 0.10` / PNG: `sh * 0.13` ✅ LOCKED | SVG: `sh * 0.28` / PNG: `sh * 0.42` | per district % | **30** | SVG divs / PNG: `<img>` | cover | bottom |
 | Ambient characters | yPct + yOffset (SVG:0 / PNG:`sh*-0.065`) | per char | — | **20** | SVG shapes | — | — |
 | Tumbleweeds | `sh * 0.105` / `sh * 0.10` | 16px / 12px | — | **32** | — | — | — |
 | **Road** | **`0`** | SVG: `sh * 0.10` / PNG: `sh * 0.18` | **`160%, left:-30%`** | **15** | SVG gradient / PNG: `<img height:200%>` | — | — |

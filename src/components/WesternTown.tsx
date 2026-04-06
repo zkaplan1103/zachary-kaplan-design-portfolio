@@ -509,10 +509,10 @@ export function WesternTown() {
           <motion.div
             style={{
               position: 'absolute',
-              top: isNight ? '8%' : '6%',
-              right: isNight ? '12%' : '10%',
-              width: isNight ? Math.max(28, sw * 0.035) : Math.max(36, sw * 0.045),
-              height: isNight ? Math.max(28, sw * 0.035) : Math.max(36, sw * 0.045),
+              top: isNight ? `calc(8% - ${sw * 0.32 * 0.293}px)` : `calc(6% - ${sw * 0.40 * 0.293}px)`,
+              right: isNight ? `calc(12% - ${sw * 0.32 * 0.325}px)` : `calc(10% - ${sw * 0.40 * 0.325}px)`,
+              width: isNight ? sw * 0.32 : sw * 0.40,
+              height: isNight ? sw * 0.32 : sw * 0.40,
               pointerEvents: 'none',
               zIndex: 12,
               x: celestialMV,
@@ -562,29 +562,20 @@ export function WesternTown() {
           <motion.div
             style={{
               position: 'absolute',
-              bottom: sh * 0.18,
+              bottom: sh * 0.047,
               left: '-30%',
               width: '160%',
-              height: sh * 0.35,
+              height: sh * 0.68,
               zIndex: 14,
               pointerEvents: 'none',
               x: mesaMV,
+              backgroundImage: `url(${mesaPng})`,
+              backgroundRepeat: 'repeat-x',
+              backgroundSize: `auto ${sh * 0.68}px`,
+              backgroundPosition: 'left bottom',
+              imageRendering: 'pixelated',
             }}
-          >
-            <img
-              src={mesaPng}
-              alt=""
-              aria-hidden="true"
-              draggable={false}
-              style={{
-                display: 'block',
-                width: '100%',
-                height: '100%',
-                objectFit: 'fill',
-                imageRendering: 'pixelated',
-              }}
-            />
-          </motion.div>
+          />
         ) : (
           <motion.div
             style={{
@@ -755,7 +746,7 @@ export function WesternTown() {
             style={{
               position: 'absolute',
               bottom: isPixelArt ? sh * 0.13 : sh * 0.1,
-              height: sh * 0.28,
+              height: isPixelArt ? sh * 0.42 : sh * 0.28,
               width: `${district.reduce((acc, b) => acc + b.w, 0) + (district.length - 1) * 0.8}%`,
               ...anchor,
               display: 'flex',
@@ -767,7 +758,7 @@ export function WesternTown() {
             }}
           >
             {district.map((bldg) => {
-              const bHeight = sh * bldg.hPct
+              const bHeight = sh * bldg.hPct * (isPixelArt ? 1.5 : 1)
               const isHovered = hoveredBuilding === bldg.id
               const imgs = BUILDING_IMAGES[bldg.id]
 
