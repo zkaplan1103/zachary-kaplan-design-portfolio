@@ -144,3 +144,28 @@ await Promise.all([animateRoom({ y: '0%' }), animateForeground({ y: '100%' })])
 // DO NOT USE — too complex, causes bugs
 const FOREGROUND_SCALE = 1 / SEATED_SCALE // deprecated
 ```
+
+---
+
+## `[TOWN_PIXEL_ART]` — PNG Mode Toggle (2026-04-05)
+
+**SUCCESS: isPixelArt state + BUILDING_IMAGES map for full layer swap**
+
+1. **Single boolean gates all layers** — `isPixelArt` state in WesternTown controls sky, moon/celestial, mesa, road, and all 5 buildings via conditional rendering
+2. **BUILDING_IMAGES map** — keyed by building ID, value is `{ closed: string, open: string }` — swap on hover using same hover state that drives SVG open/closed variants
+3. **PNG hover swap** — buildings show `closed` PNG by default, `open` PNG when hovered. Mirrors the existing SVG open/closed logic exactly; no new state needed
+4. **All world-layer PNGs** (z ≤ 35) — sky.png, moon.png, mesa.png, road.png live in `src/assets/images/town/`. 12 PNGs total.
+5. **Toggle button** sits next to day/night toggle at UI layer (z:42). Symbol: `■` for SVG mode, `△` for PNG mode.
+6. **Parallax, NavMarker, ambient characters all preserved** — pixel art mode only swaps visual layer content, not layout or interaction logic
+
+---
+
+## `[BUILDING_INTERIOR]` — 3D CSS Book Flip (2026-04-05)
+
+**SUCCESS: rotateY page flip with backfaceVisibility + z:999 hitboxes**
+
+1. **CSS 3D flip, not Framer Motion** — use `style={{ transform: \`rotateY(${flipped ? 180 : 0}deg)\` }}` + `transition: 'transform 0.8s cubic-bezier(0.4, 0, 0.2, 1)'`
+2. **backfaceVisibility: 'hidden'** on each page face — prevents bleed-through during mid-flip
+3. **Hitbox pattern for pointerEvents override** — parent has `pointerEvents: 'none'`; clickable zones use `style={{ position: 'absolute', zIndex: 999, pointerEvents: 'auto' }}`
+4. **Page structure** — page 0 = front face (`rotateY(0deg)`), page 1 = back face (`rotateY(-180deg)` initial, counter-rotates on flip)
+5. **`entryBuilding` prop removed** from both `HomePage.tsx` and `WesternTown.tsx` — building routing handled by React Router, not prop drilling

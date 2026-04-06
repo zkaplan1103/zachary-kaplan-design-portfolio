@@ -15,15 +15,19 @@ Senior full-stack engineer + UI/UX collaborator on a React 19 + Tailwind v4 desi
 | `[CRT_BEZEL]` | Bezel sizing, monitor PNG, screen wrapper, BezelContext, measure-bezel script |
 | `[FRAMER_MOTION]` | Any animation — variants, useAnimate, transitions, keyframes |
 | `[CANVAS_ANIM]` | IntroAnimation canvas, particle system, snake/swarm rendering, dragonEngine |
-| `[POSITIONING]` | z-index, position fixed/absolute/relative inside CRTScreen, layout overlap bugs |
+| `[POSITIONING]` | z-index, position fixed/absolute/relative inside CRTScreen, layout overlap bugs → load `.claude/DIMENSIONS.md` + `.claude/TOWN_COORDINATES.md` |
 | `[LENIS_SCROLL]` | Scroll events, scroll-driven animation, whileInView, scroll velocity |
 | `[DESIGN_SYSTEM]` | Colors, fonts, spacing, new sections, Tailwind tokens, day/night palettes |
 | `[TOWN_DIALOGUE]` | PokemonTextBox, dialogue frame border, corner orb shading, day/night inversion |
-| `[TOWN_LOGIC]` | WesternTown z-index sandwich, ambient character spawner, AmbientEntity engine, CHARACTER_MANIFEST |
+| `[TOWN_LOGIC]` | WesternTown z-index sandwich, ambient character spawner, AmbientEntity engine, CHARACTER_MANIFEST → load `.claude/DIMENSIONS.md` + `.claude/TOWN_COORDINATES.md`. **CRITICAL: SVG is the wireframe.** When adding pixel art mode, mirror SVG positions exactly. Do NOT reposition PNGs independently. The PNG is a texture, not a layout decision. |
+| `[TOWN_PIXEL_ART]` | PNG mode toggle (■/△ button), BUILDING_IMAGES map, isPixelArt state, sky/moon/mesa/road/building PNG swap → load `.claude/DIMENSIONS.md` + `.claude/TOWN_COORDINATES.md`. **CRITICAL: SVG is the wireframe.** When adding pixel art mode, mirror SVG positions exactly. Do NOT reposition PNGs independently. The PNG is a texture, not a layout decision. |
+| `[BUILDING_INTERIOR]` | BuildingInteriorPage.tsx, 3D CSS page flip (rotateY + backfaceVisibility), hitbox z:999 pointerEvents override, page 0 "The Athlete" / page 1 "The Career" |
 | `[ARCHITECTURE]` | One-shot logic patterns, bezel boundary rule, unified spacing constants, pre-scan checklist → load `.claude/ARCH_LOGIC.md` |
 | `[MCP_ROUTING]` | Unsure which tool to use, or starting a new UI component or multi-file feature |
 
 **Protocol:** Before writing any code, state which tags apply. Then load only those memory files. Do not load both files for every task.
+
+**Positioning Rule:** Always load `.claude/TOWN_COORDINATES.md` before modifying any WesternTown styles. Never use relative increments (e.g., "move up a bit"); only use absolute values from the Coordinate Map. If a value must change, update `TOWN_COORDINATES.md` first, then apply to code.
 
 ---
 

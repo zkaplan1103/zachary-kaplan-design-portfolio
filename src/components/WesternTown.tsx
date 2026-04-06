@@ -426,12 +426,24 @@ export function WesternTown() {
               width: '160%',
               zIndex: 10,
               x: skyMV,
-              backgroundImage: `url(${nightskyPng})`,
-              backgroundRepeat: 'repeat-x',
-              backgroundSize: 'auto 100%',
-              backgroundPosition: 'center top',
+              overflow: 'hidden',
             }}
-          />
+          >
+            <img
+              src={nightskyPng}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              style={{
+                display: 'block',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                objectPosition: 'center top',
+                imageRendering: 'pixelated',
+              }}
+            />
+          </motion.div>
         ) : (
           <motion.div
             animate={{ background: isNight ? NIGHT_SKY : DAY_SKY }}
@@ -939,11 +951,24 @@ export function WesternTown() {
               height: sh * 0.1,
               zIndex: 15,
               x: groundMV,
-              backgroundImage: `url(${roadPng})`,
-              backgroundRepeat: 'repeat-x',
-              backgroundSize: 'auto 100%',
+              overflow: 'hidden',
             }}
-          />
+          >
+            <img
+              src={roadPng}
+              alt=""
+              aria-hidden="true"
+              draggable={false}
+              style={{
+                display: 'block',
+                width: '100%',
+                height: '200%',
+                objectFit: 'cover',
+                objectPosition: 'top',
+                imageRendering: 'pixelated',
+              }}
+            />
+          </motion.div>
         ) : (
           <motion.div
             animate={{ background: isNight ? NIGHT_GROUND : DAY_GROUND }}
