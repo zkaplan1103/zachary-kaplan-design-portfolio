@@ -562,7 +562,7 @@ export function WesternTown() {
           <motion.div
             style={{
               position: 'absolute',
-              bottom: sh * 0.1,
+              bottom: sh * 0.18,
               left: '-30%',
               width: '160%',
               height: sh * 0.35,
@@ -741,6 +741,7 @@ export function WesternTown() {
             sh={sh}
             direction={direction}
             onComplete={handleEntityComplete}
+            yOffset={isPixelArt ? sh * -0.08 : 0}
           />
         ))}
 
@@ -753,7 +754,7 @@ export function WesternTown() {
             key={JSON.stringify(anchor)}
             style={{
               position: 'absolute',
-              bottom: sh * 0.1,
+              bottom: isPixelArt ? sh * 0.13 : sh * 0.1,
               height: sh * 0.28,
               width: `${district.reduce((acc, b) => acc + b.w, 0) + (district.length - 1) * 0.8}%`,
               ...anchor,
@@ -948,7 +949,7 @@ export function WesternTown() {
               bottom: 0,
               left: '-30%',
               width: '160%',
-              height: sh * 0.1,
+              height: sh * 0.18,
               zIndex: 15,
               x: groundMV,
               overflow: 'hidden',
@@ -963,8 +964,6 @@ export function WesternTown() {
                 display: 'block',
                 width: '100%',
                 height: '200%',
-                objectFit: 'cover',
-                objectPosition: 'top',
                 imageRendering: 'pixelated',
               }}
             />

@@ -187,14 +187,15 @@ export interface AmbientEntityProps {
   sh:         number    // bezel screen height px
   direction:  'ltr' | 'rtl'
   onComplete: (instanceId: string) => void
+  yOffset?:   number   // px offset added to top position (negative = move up)
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function AmbientEntity({ instanceId, def, sw, sh, direction, onComplete }: AmbientEntityProps) {
+export function AmbientEntity({ instanceId, def, sw, sh, direction, onComplete, yOffset = 0 }: AmbientEntityProps) {
   const scaledW = def.width  * def.scale
   const scaledH = def.height * def.scale
-  const yPx     = sh * def.yPct - scaledH  // bottom of entity at yPct * sh
+  const yPx     = sh * def.yPct - scaledH + yOffset  // bottom of entity at yPct * sh
 
   // RTL: flip the SVG horizontally via scaleX(-1)
   const flipStyle: React.CSSProperties = direction === 'rtl'

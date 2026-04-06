@@ -17,11 +17,11 @@ The SVG layout IS the coordinate system. When adding pixel art mode, every PNG e
 
 | Element | bottom | height | Notes |
 |---|---|---|---|
-| Ground (road) | `0` | `sh * 0.10` | Baseline. All other elements reference this. |
-| Building base | `sh * 0.10` | `sh * 0.28` (container) / `sh * bldg.hPct` (individual) | Container is shorter than tallest building — overflow:hidden clips bases |
-| Mesa base | `sh * 0.10` | `sh * 0.35` | Same anchor as road top |
-| Cowboys | `yPct * sh - scaledH` | per character | yPct varies per character type (see below) |
-| Tumbleweeds | `sh * 0.105` | 16px / 12px | Slightly above road surface |
+| Ground (road) | `0` | SVG: `sh * 0.10` / PNG: `sh * 0.18` | PNG road is taller to show full dirt surface |
+| Building base | SVG: `sh * 0.10` / PNG: `sh * 0.13` | `sh * 0.28` (container) / `sh * bldg.hPct` (individual) | PNG: overlaps road by sh*0.05, landing in dark shadow zone |
+| Mesa base | SVG: `sh * 0.10` / PNG: `sh * 0.18` | `sh * 0.35` | Matches road top anchor |
+| Cowboys | `yPct * sh - scaledH + yOffset` | per character | SVG: yOffset=0 / PNG: yOffset=`sh * -0.08` (moves up) |
+| Tumbleweeds | `sh * 0.105` | 16px / 12px | Slightly above SVG road surface |
 
 ### Building hPct values (per-building heights, `bHeight = sh * hPct`)
 
@@ -52,12 +52,12 @@ Both SVG and PNG modes share the same container positions. PNG img tags use obje
 | Sky | `top:0, bottom:0` | 100% | `160%, left:-30%` | **10** | SVG: gradient / PNG: `<img>` | cover | center top |
 | Stars | `top:0, bottom:0` | — | `160%, left:-30%` | **11** | SVG dots | — | — |
 | Moon / Sun | `top: 8%/6%` | `sw*0.035 / sw*0.045` | auto, right:12%/10% | **12** | SVG glow / PNG: `<img>` | contain | — |
-| **Mesa** | **`sh * 0.10`** | **`sh * 0.35`** | **`160%, left:-30%`** | **14** | SVG path / PNG: `<img>` | fill | — |
+| **Mesa** | SVG: `sh * 0.10` / PNG: `sh * 0.18` | **`sh * 0.35`** | **`160%, left:-30%`** | **14** | SVG path / PNG: `<img>` | fill | — |
 | **Title card** | — | — | — | **35** | — | — | — |
-| **Buildings container** | **`sh * 0.10`** | **`sh * 0.28`** | per district % | **30** | SVG divs / PNG: `<img>` | cover | bottom |
-| Ambient characters | computed from yPct | per char | — | **20** | SVG shapes | — | — |
+| **Buildings container** | SVG: `sh * 0.10` / PNG: `sh * 0.13` | **`sh * 0.28`** | per district % | **30** | SVG divs / PNG: `<img>` | cover | bottom |
+| Ambient characters | yPct + yOffset (SVG:0 / PNG:`sh*-0.08`) | per char | — | **20** | SVG shapes | — | — |
 | Tumbleweeds | `sh * 0.105` / `sh * 0.10` | 16px / 12px | — | **32** | — | — | — |
-| **Road** | **`0`** | **`sh * 0.10`** | **`160%, left:-30%`** | **15** | SVG gradient / PNG: `<img height:200%>` | cover | top |
+| **Road** | **`0`** | SVG: `sh * 0.10` / PNG: `sh * 0.18` | **`160%, left:-30%`** | **15** | SVG gradient / PNG: `<img height:200%>` | — | — |
 | Nav labels overlay | inset:0 | — | — | **100** | — | — | — |
 | UI (toggles, CTA) | — | — | — | **42** | — | — | — |
 | District guide | `sh * 0.1` | — | — | **51** | — | — | — |
