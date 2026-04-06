@@ -15,31 +15,31 @@ The SVG layout IS the coordinate system. When adding pixel art mode, every PNG e
 
 ## Layout Anchor Points (from SVG source of truth)
 
-| Element | bottom | height | Notes |
-|---|---|---|---|
-| Ground (road) | `0` | SVG: `sh * 0.10` / PNG: `sh * 0.18` | PNG road is taller to show full dirt surface |
-| Building base | SVG: `sh * 0.10` / PNG: `sh * 0.13` ✅ LOCKED | SVG: `sh * 0.28` (container) / PNG: `sh * 0.42` (container). Individual: `sh * hPct * 1.5` in PNG mode | **base stays locked via alignItems:flex-end — changing height never moves base. To resize PNG buildings: change height multiplier (1.5) only. Do NOT touch bottom.** |
-| Mesa base | SVG: `sh * 0.10` / PNG: `sh * 0.18 - height * 0.196` ✅ FORMULA | SVG: `sh * 0.35` / PNG: `sh * 0.68` ✅ LOCKED | PNG: background-repeat:repeat-x, backgroundSize:auto sh*0.68, backgroundPosition:left bottom. **CRITICAL: bottom = sh*0.18 - height*0.196. Increasing height MUST recalculate bottom or base drifts up.** |
-| Cowboys | `yPct * sh - scaledH + yOffset` | per character | SVG: yOffset=0 / PNG: yOffset=`sh * -0.065` — feet land at sh*0.84 from top (dark/light road boundary) |
-| Tumbleweeds | `sh * 0.105` | 16px / 12px | Slightly above SVG road surface |
+| Element       | bottom                                                          | height                                                                                                               | Notes                                                                                                                                                                                                          |
+| ------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ground (road) | `0`                                                             | SVG: `sh * 0.10` / PNG: `sh * 0.18`                                                                                  | PNG road is taller to show full dirt surface                                                                                                                                                                   |
+| Building base | SVG: `sh * 0.10` / PNG: `sh * 0.13` ✅ LOCKED                   | SVG: `sh * 0.28` (container) / PNG: `sh * 0.36` (container). Individual: `sh * hPct * scale` where scale=1.3 for PNG | **Uniform scale rule: scale applies to BOTH width (district container + individual buildings) AND height. Never scale height alone. base stays locked via alignItems:flex-end.**                               |
+| Mesa base     | SVG: `sh * 0.10` / PNG: `sh * 0.18 - height * 0.196` ✅ FORMULA | SVG: `sh * 0.35` / PNG: `sh * 0.68` ✅ LOCKED                                                                        | PNG: background-repeat:repeat-x, backgroundSize:auto sh*0.68, backgroundPosition:left bottom. \*\*CRITICAL: bottom = sh*0.18 - height\*0.196. Increasing height MUST recalculate bottom or base drifts up.\*\* |
+| Cowboys       | `yPct * sh - scaledH + yOffset`                                 | per character                                                                                                        | SVG: yOffset=0 / PNG: yOffset=`sh * -0.065` — feet land at sh\*0.84 from top (dark/light road boundary)                                                                                                        |
+| Tumbleweeds   | `sh * 0.105`                                                    | 16px / 12px                                                                                                          | Slightly above SVG road surface                                                                                                                                                                                |
 
 ### Building hPct values (per-building heights, `bHeight = sh * hPct`)
 
-| Building | hPct | District |
-|---|---|---|
-| saloon | 0.22 | A (left) |
-| sheriff | 0.19 | A (left) |
-| bank | 0.20 | B (right) |
+| Building  | hPct | District  |
+| --------- | ---- | --------- |
+| saloon    | 0.22 | A (left)  |
+| sheriff   | 0.19 | A (left)  |
+| bank      | 0.20 | B (right) |
 | telegraph | 0.15 | B (right) |
 
 ### Ambient character yPct values
 
-| Character | yPct | Notes |
-|---|---|---|
-| HORSE_WAGON | 0.905 | Unified ground line |
+| Character   | yPct  | Notes                        |
+| ----------- | ----- | ---------------------------- |
+| HORSE_WAGON | 0.905 | Unified ground line          |
 | COWBOY_WALK | 0.905 | Reference — visually correct |
-| NIGHT_RIDER | 0.905 | Unified ground line |
-| BANK_ROBBER | 0.905 | Unified ground line |
+| NIGHT_RIDER | 0.905 | Unified ground line          |
+| BANK_ROBBER | 0.905 | Unified ground line          |
 
 ---
 
@@ -47,21 +47,21 @@ The SVG layout IS the coordinate system. When adding pixel art mode, every PNG e
 
 Both SVG and PNG modes share the same container positions. PNG img tags use objectFit to handle transparent padding.
 
-| Layer | bottom | height | width / left | z-index | SVG/PNG | objectFit | objectPosition |
-|---|---|---|---|---|---|---|---|
-| Sky | `top:0, bottom:0` | 100% | `160%, left:-30%` | **10** | SVG: gradient / PNG: `<img>` | cover | center top |
-| Stars | `top:0, bottom:0` | — | `160%, left:-30%` | **11** | SVG dots | — | — |
-| Moon / Sun | PNG: `calc(8% - size*0.293)` night / `calc(6% - size*0.293)` day | PNG: `sw*0.32` night / `sw*0.40` day | right: `calc(12% - size*0.325)` | **12** | SVG glow / PNG: `<img>` contain | — | **CRITICAL: top/right must subtract padding offsets (top:29.3%, right:32.5%) when resizing or moon drifts. Formula: top = desired% - containerSize*0.293** |
-| **Mesa** | SVG: `sh * 0.10` / PNG: `sh * 0.047` (= sh*0.18 - sh*0.68*0.196) ✅ | SVG: `sh * 0.35` / PNG: `sh * 0.68` ✅ | **`160%, left:-30%`** | **14** | SVG path / PNG: `background-repeat:repeat-x` | — | left bottom |
-| **Title card** | — | — | — | **35** | — | — | — |
-| **Buildings container** | SVG: `sh * 0.10` / PNG: `sh * 0.13` ✅ LOCKED | SVG: `sh * 0.28` / PNG: `sh * 0.42` | per district % | **30** | SVG divs / PNG: `<img>` | cover | bottom |
-| Ambient characters | yPct + yOffset (SVG:0 / PNG:`sh*-0.065`) | per char | — | **20** | SVG shapes | — | — |
-| Tumbleweeds | `sh * 0.105` / `sh * 0.10` | 16px / 12px | — | **32** | — | — | — |
-| **Road** | **`0`** | SVG: `sh * 0.10` / PNG: `sh * 0.18` | **`160%, left:-30%`** | **15** | SVG gradient / PNG: `<img height:200%>` | — | — |
-| Nav labels overlay | inset:0 | — | — | **100** | — | — | — |
-| UI (toggles, CTA) | — | — | — | **42** | — | — | — |
-| District guide | `sh * 0.1` | — | — | **51** | — | — | — |
-| Cinematic fade | inset:0 | — | — | **200** | — | — | — |
+| Layer                   | bottom                                                               | height                                 | width / left                    | z-index | SVG/PNG                                      | objectFit | objectPosition                                                                                                                                              |
+| ----------------------- | -------------------------------------------------------------------- | -------------------------------------- | ------------------------------- | ------- | -------------------------------------------- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sky                     | `top:0, bottom:0`                                                    | 100%                                   | `160%, left:-30%`               | **10**  | SVG: gradient / PNG: `<img>`                 | cover     | center top                                                                                                                                                  |
+| Stars                   | `top:0, bottom:0`                                                    | —                                      | `160%, left:-30%`               | **11**  | SVG dots                                     | —         | —                                                                                                                                                           |
+| Moon / Sun              | PNG: `calc(8% - size*0.293)` night / `calc(6% - size*0.293)` day     | PNG: `sw*0.32` night / `sw*0.40` day   | right: `calc(12% - size*0.325)` | **12**  | SVG glow / PNG: `<img>` contain              | —         | **CRITICAL: top/right must subtract padding offsets (top:29.3%, right:32.5%) when resizing or moon drifts. Formula: top = desired% - containerSize\*0.293** |
+| **Mesa**                | SVG: `sh * 0.10` / PNG: `sh * 0.047` (= sh*0.18 - sh*0.68\*0.196) ✅ | SVG: `sh * 0.35` / PNG: `sh * 0.68` ✅ | **`160%, left:-30%`**           | **14**  | SVG path / PNG: `background-repeat:repeat-x` | —         | left bottom                                                                                                                                                 |
+| **Title card**          | —                                                                    | —                                      | —                               | **35**  | —                                            | —         | —                                                                                                                                                           |
+| **Buildings container** | SVG: `sh * 0.10` / PNG: `sh * 0.13` ✅ LOCKED                        | SVG: `sh * 0.28` / PNG: `sh * 0.36`    | per district % × 1.3            | **30**  | SVG divs / PNG: `<img>`                      | cover     | bottom                                                                                                                                                      |
+| Ambient characters      | yPct + yOffset (SVG:0 / PNG:`sh*-0.065`)                             | per char                               | —                               | **20**  | SVG shapes                                   | —         | —                                                                                                                                                           |
+| Tumbleweeds             | `sh * 0.105` / `sh * 0.10`                                           | 16px / 12px                            | —                               | **32**  | —                                            | —         | —                                                                                                                                                           |
+| **Road**                | **`0`**                                                              | SVG: `sh * 0.10` / PNG: `sh * 0.18`    | **`160%, left:-30%`**           | **15**  | SVG gradient / PNG: `<img height:200%>`      | —         | —                                                                                                                                                           |
+| Nav labels overlay      | inset:0                                                              | —                                      | —                               | **100** | —                                            | —         | —                                                                                                                                                           |
+| UI (toggles, CTA)       | —                                                                    | —                                      | —                               | **42**  | —                                            | —         | —                                                                                                                                                           |
+| District guide          | `sh * 0.1`                                                           | —                                      | —                               | **51**  | —                                            | —         | —                                                                                                                                                           |
+| Cinematic fade          | inset:0                                                              | —                                      | —                               | **200** | —                                            | —         | —                                                                                                                                                           |
 
 > **Road PNG special case**: img has `height: '200%'` inside the `sh * 0.10` container (overflow:hidden). road.png has 50% transparent bottom — doubling img height + `objectPosition: top` fills the container with only the visual road content.
 
@@ -89,13 +89,13 @@ z:10   Sky                            ← backmost
 
 ## Parallax Rates (actual code values)
 
-| Layer | MotionValue | sw coefficient | % of screen shift |
-|---|---|---|---|
-| Sky | `skyMV` | `sw * -0.02` | 2% |
-| Moon / Stars | `celestialMV` | `sw * -0.04` | 4% |
-| Mesa | `mesaMV` | `sw * -0.08` | 8% |
-| Buildings | `buildingsMV` | `sw * -0.15` | 15% |
-| Road | `groundMV` | `sw * -0.25` | 25% |
+| Layer        | MotionValue   | sw coefficient | % of screen shift |
+| ------------ | ------------- | -------------- | ----------------- |
+| Sky          | `skyMV`       | `sw * -0.02`   | 2%                |
+| Moon / Stars | `celestialMV` | `sw * -0.04`   | 4%                |
+| Mesa         | `mesaMV`      | `sw * -0.08`   | 8%                |
+| Buildings    | `buildingsMV` | `sw * -0.15`   | 15%               |
+| Road         | `groundMV`    | `sw * -0.25`   | 25%               |
 
 Spring: `stiffness: 50, damping: 20`. mouseNorm range: `-1 → 1`.
 Max road shift at edge = `sw * 0.25`. Container at 160% width with `-30%` left covers `±30%` = `sw * 0.30` — sufficient buffer.
@@ -128,3 +128,4 @@ Required buffer:   sw * 0.25 (max shift) < sw * 0.30 (available) ✅
 2. SVG uses `sh * 0.1` (JS pixels). Earlier fixes used `vh` units — different systems caused drift.
 3. road.png has 50% transparent bottom. Without `height: 200%` + `objectPosition: top`, the container appears empty.
 4. mesa.png has 34% transparent top. `objectFit: fill` stretches it — use `cover` or `fill` only if the container matches content proportions.
+5. **Aspect ratio distortion**: Scaling only height (`hPct * 1.5`) without scaling width stretches the 1:1 PNG assets vertically. Always scale uniformly: width multiplier × N, height multiplier × N, container width × N.

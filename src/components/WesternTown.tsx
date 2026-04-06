@@ -509,10 +509,14 @@ export function WesternTown() {
           <motion.div
             style={{
               position: 'absolute',
-              top: isNight ? `calc(8% - ${sw * 0.32 * 0.293}px)` : `calc(6% - ${sw * 0.40 * 0.293}px)`,
-              right: isNight ? `calc(12% - ${sw * 0.32 * 0.325}px)` : `calc(10% - ${sw * 0.40 * 0.325}px)`,
-              width: isNight ? sw * 0.32 : sw * 0.40,
-              height: isNight ? sw * 0.32 : sw * 0.40,
+              top: isNight
+                ? `calc(8% - ${sw * 0.32 * 0.293}px)`
+                : `calc(6% - ${sw * 0.4 * 0.293}px)`,
+              right: isNight
+                ? `calc(12% - ${sw * 0.32 * 0.325}px)`
+                : `calc(10% - ${sw * 0.4 * 0.325}px)`,
+              width: isNight ? sw * 0.32 : sw * 0.4,
+              height: isNight ? sw * 0.32 : sw * 0.4,
               pointerEvents: 'none',
               zIndex: 12,
               x: celestialMV,
@@ -740,30 +744,77 @@ export function WesternTown() {
         {[
           { district: DISTRICT_A, anchor: { left: '2%' } },
           { district: DISTRICT_B, anchor: { right: '2%' } },
-        ].map(({ district, anchor }) => (
-          <motion.div
-            key={JSON.stringify(anchor)}
-            style={{
-              position: 'absolute',
-              bottom: isPixelArt ? sh * 0.13 : sh * 0.1,
-              height: isPixelArt ? sh * 0.42 : sh * 0.28,
-              width: `${district.reduce((acc, b) => acc + b.w, 0) + (district.length - 1) * 0.8}%`,
-              ...anchor,
-              display: 'flex',
-              alignItems: 'flex-end',
-              gap: `${sw * 0.006}px`,
-              zIndex: 30,
-              overflow: 'hidden',
-              x: buildingsMV,
-            }}
-          >
-            {district.map((bldg) => {
-              const bHeight = sh * bldg.hPct * (isPixelArt ? 1.5 : 1)
-              const isHovered = hoveredBuilding === bldg.id
-              const imgs = BUILDING_IMAGES[bldg.id]
+        ].map(({ district, anchor }) => {
+          const scale = isPixelArt ? 1.3 : 1
+          return (
+            <motion.div
+              key={JSON.stringify(anchor)}
+              style={{
+                position: 'absolute',
+                bottom: isPixelArt ? sh * 0.13 : sh * 0.1,
+                height: isPixelArt ? sh * 0.36 : sh * 0.28,
+                width: `${(district.reduce((acc, b) => acc + b.w, 0) + (district.length - 1) * 0.8) * scale}%`,
+                ...anchor,
+                display: 'flex',
+                alignItems: 'flex-end',
+                gap: `${sw * 0.006 * scale}px`,
+                zIndex: 30,
+                overflow: 'hidden',
+                x: buildingsMV,
+              }}
+            >
+              {district.map((bldg) => {
+                const bHeight = sh * bldg.hPct * scale
+                const isHovered = hoveredBuilding === bldg.id
+                const imgs = BUILDING_IMAGES[bldg.id]
 
-              // ── Pixel Art Mode: PNG sprite with hover swap ──
-              if (isPixelArt && imgs) {
+                // ── Pixel Art Mode: PNG sprite with hover swap ──
+                if (isPixelArt && imgs) {
+                  return (
+                    <motion.div
+                      key={bldg.id}
+                      onMouseEnter={() => !isZooming && setHoveredBuilding(bldg.id)}
+                      onMouseLeave={() => setHoveredBuilding(null)}
+                      onClick={() => {
+                        if (isZooming) return
+                        handleBuildingClick(
+                          bldg.id,
+                          DISTRICT_A.some((b) => b.id === bldg.id)
+                        )
+                      }}
+                      animate={{
+                        filter: isHovered
+                          ? 'drop-shadow(0 0 15px rgba(255,255,255,0.4)) brightness(1.15)'
+                          : 'brightness(1)',
+                      }}
+                      transition={{ duration: 0.3 }}
+                      style={{
+                        width: `${bldg.w * scale}%`,
+                        height: bHeight,
+                        position: 'relative',
+                        flexShrink: 0,
+                        zIndex: 30,
+                        cursor: isZooming ? 'default' : 'pointer',
+                      }}
+                    >
+                      <img
+                        src={isHovered ? imgs.open : imgs.closed}
+                        alt={bldg.id}
+                        draggable={false}
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          height: '100%',
+                          objectFit: 'cover',
+                          objectPosition: 'bottom',
+                          imageRendering: 'pixelated',
+                        }}
+                      />
+                    </motion.div>
+                  )
+                }
+
+                // ── SVG Mode: CSS buildings with windows, doors, signs ──
                 return (
                   <motion.div
                     key={bldg.id}
@@ -785,152 +836,112 @@ export function WesternTown() {
                     style={{
                       width: `${bldg.w}%`,
                       height: bHeight,
+                      backgroundColor: palette.building,
+                      borderRadius: '2px 2px 0 0',
+                      borderTop: `1px solid ${palette.buildingBorderTop}`,
                       position: 'relative',
                       flexShrink: 0,
                       zIndex: 30,
                       cursor: isZooming ? 'default' : 'pointer',
+                      transition: `background-color ${CROSS}s`,
                     }}
                   >
-                    <img
-                      src={isHovered ? imgs.open : imgs.closed}
-                      alt={bldg.id}
-                      draggable={false}
+                    {/* Peaked roof */}
+                    {bldg.hasPeak && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: -10,
+                          left: '15%',
+                          right: '15%',
+                          height: 10,
+                          backgroundColor: palette.building,
+                          clipPath: 'polygon(0 100%, 50% 0, 100% 100%)',
+                          transition: `background-color ${CROSS}s`,
+                        }}
+                      />
+                    )}
+
+                    {/* Hanging sign */}
+                    {bldg.hasSign && (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          top: -4,
+                          left: '10%',
+                          right: '10%',
+                          height: 6,
+                          backgroundColor: isNight ? '#2a1a0a' : '#5a4020',
+                          borderRadius: 1,
+                          transition: `background-color ${CROSS}s`,
+                        }}
+                      />
+                    )}
+
+                    {/* Windows */}
+                    {Array.from({ length: bldg.windows }).map((_, row) => (
+                      <div
+                        key={row}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-evenly',
+                          paddingTop: '12%',
+                        }}
+                      >
+                        {[0, 1].map((col) => (
+                          <div
+                            key={col}
+                            style={{
+                              width: '22%',
+                              aspectRatio: '1 / 1.3',
+                              backgroundColor: palette.windowBg,
+                              boxShadow: palette.windowGlow,
+                              borderRadius: 1,
+                              transition: `background-color ${CROSS}s, box-shadow ${CROSS}s`,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ))}
+
+                    {/* Door — reactive glow void + 3D-swing leaf */}
+                    <div
                       style={{
-                        display: 'block',
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover',
-                        objectPosition: 'bottom',
-                        imageRendering: 'pixelated',
+                        position: 'absolute',
+                        bottom: 0,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        width: '28%',
+                        height: '18%',
+                        perspective: '120px',
+                        borderRadius: '2px 2px 0 0',
+                        backgroundColor: isNight ? '#FFB300' : '#FFF9E0',
+                        transition: `background-color ${CROSS}s`,
+                        boxShadow: isNight
+                          ? '0 0 12px 4px rgba(255,179,0,0.6), 0 0 28px 8px rgba(255,140,0,0.3)'
+                          : '0 0 10px 3px rgba(255,249,200,0.7)',
                       }}
-                    />
+                    >
+                      <motion.div
+                        animate={{ rotateY: clickedBuilding === bldg.id ? -90 : 0 }}
+                        transition={{ duration: DOOR_OPEN_MS / 1000, ease: [0.4, 0, 0.8, 1] }}
+                        style={{
+                          width: '100%',
+                          height: '100%',
+                          backgroundColor: isNight ? '#1a1207' : '#2a1a0a',
+                          borderRadius: '2px 2px 0 0',
+                          transformOrigin: 'left center',
+                          transformStyle: 'preserve-3d',
+                          transition: `background-color ${CROSS}s`,
+                        }}
+                      />
+                    </div>
                   </motion.div>
                 )
-              }
-
-              // ── SVG Mode: CSS buildings with windows, doors, signs ──
-              return (
-                <motion.div
-                  key={bldg.id}
-                  onMouseEnter={() => !isZooming && setHoveredBuilding(bldg.id)}
-                  onMouseLeave={() => setHoveredBuilding(null)}
-                  onClick={() => {
-                    if (isZooming) return
-                    handleBuildingClick(
-                      bldg.id,
-                      DISTRICT_A.some((b) => b.id === bldg.id)
-                    )
-                  }}
-                  animate={{
-                    filter: isHovered
-                      ? 'drop-shadow(0 0 15px rgba(255,255,255,0.4)) brightness(1.15)'
-                      : 'brightness(1)',
-                  }}
-                  transition={{ duration: 0.3 }}
-                  style={{
-                    width: `${bldg.w}%`,
-                    height: bHeight,
-                    backgroundColor: palette.building,
-                    borderRadius: '2px 2px 0 0',
-                    borderTop: `1px solid ${palette.buildingBorderTop}`,
-                    position: 'relative',
-                    flexShrink: 0,
-                    zIndex: 30,
-                    cursor: isZooming ? 'default' : 'pointer',
-                    transition: `background-color ${CROSS}s`,
-                  }}
-                >
-                  {/* Peaked roof */}
-                  {bldg.hasPeak && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: -10,
-                        left: '15%',
-                        right: '15%',
-                        height: 10,
-                        backgroundColor: palette.building,
-                        clipPath: 'polygon(0 100%, 50% 0, 100% 100%)',
-                        transition: `background-color ${CROSS}s`,
-                      }}
-                    />
-                  )}
-
-                  {/* Hanging sign */}
-                  {bldg.hasSign && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: -4,
-                        left: '10%',
-                        right: '10%',
-                        height: 6,
-                        backgroundColor: isNight ? '#2a1a0a' : '#5a4020',
-                        borderRadius: 1,
-                        transition: `background-color ${CROSS}s`,
-                      }}
-                    />
-                  )}
-
-                  {/* Windows */}
-                  {Array.from({ length: bldg.windows }).map((_, row) => (
-                    <div
-                      key={row}
-                      style={{ display: 'flex', justifyContent: 'space-evenly', paddingTop: '12%' }}
-                    >
-                      {[0, 1].map((col) => (
-                        <div
-                          key={col}
-                          style={{
-                            width: '22%',
-                            aspectRatio: '1 / 1.3',
-                            backgroundColor: palette.windowBg,
-                            boxShadow: palette.windowGlow,
-                            borderRadius: 1,
-                            transition: `background-color ${CROSS}s, box-shadow ${CROSS}s`,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  ))}
-
-                  {/* Door — reactive glow void + 3D-swing leaf */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: 0,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: '28%',
-                      height: '18%',
-                      perspective: '120px',
-                      borderRadius: '2px 2px 0 0',
-                      backgroundColor: isNight ? '#FFB300' : '#FFF9E0',
-                      transition: `background-color ${CROSS}s`,
-                      boxShadow: isNight
-                        ? '0 0 12px 4px rgba(255,179,0,0.6), 0 0 28px 8px rgba(255,140,0,0.3)'
-                        : '0 0 10px 3px rgba(255,249,200,0.7)',
-                    }}
-                  >
-                    <motion.div
-                      animate={{ rotateY: clickedBuilding === bldg.id ? -90 : 0 }}
-                      transition={{ duration: DOOR_OPEN_MS / 1000, ease: [0.4, 0, 0.8, 1] }}
-                      style={{
-                        width: '100%',
-                        height: '100%',
-                        backgroundColor: isNight ? '#1a1207' : '#2a1a0a',
-                        borderRadius: '2px 2px 0 0',
-                        transformOrigin: 'left center',
-                        transformStyle: 'preserve-3d',
-                        transition: `background-color ${CROSS}s`,
-                      }}
-                    />
-                  </div>
-                </motion.div>
-              )
-            })}
-          </motion.div>
-        ))}
+              })}
+            </motion.div>
+          )
+        })}
 
         {/* ═══════ z:15 — GROUND (parallax layer 4, -25% shift) ═══════ */}
         {isPixelArt ? (
