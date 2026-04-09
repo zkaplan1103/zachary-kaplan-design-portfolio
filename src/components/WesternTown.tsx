@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { motion, AnimatePresence, useAnimate, useSpring, useTransform } from 'framer-motion'
 import { useNavigate } from 'react-router-dom'
 import { useBezelContext } from '@/contexts/BezelContext'
@@ -154,6 +154,12 @@ export function WesternTown() {
   const [guideAFacing, setGuideAFacing] = useState<1 | -1>(1)
   const [guideBFacing, setGuideBFacing] = useState<1 | -1>(-1)
 
+  // Moving state — true while walk animation is running, drives sprite frame cycling
+  const [guideAMoving, setGuideAMoving] = useState(false)
+  const [guideBMoving, setGuideBMoving] = useState(false)
+  const guideAMoveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const guideBMoveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // ── Spring-damped parallax camera ────────────────────────────────────────
   // mouseSpring smoothly trails mouseNorm — stiffness:50 damping:20 gives
   // a gentle "settle" after the mouse stops (overshoots slightly then rests).
@@ -191,7 +197,7 @@ export function WesternTown() {
   // Building center lookup — pixel widths relative to each district container
   const GAP_PX = sw * 0.006
 
-  const buildingInfo = (() => {
+  const buildingInfo = useMemo(() => {
     const map: Record<string, { cx: number; bw: number; hPct: number }> = {}
     const bldgScale = isPixelArt ? 1.96 : 1
     // Gap between buildings inside the container (same formula as the flex gap in the DOM)
@@ -230,7 +236,7 @@ export function WesternTown() {
     }
 
     return map
-  })()
+  }, [sw, sh, isPixelArt])
 
   // ── Freeze spring while transition plays so layers don't drift ──────────
   // jump() to current value — stops spring motion without resetting position.
@@ -292,17 +298,17 @@ export function WesternTown() {
   const WALK_EASE = 'easeInOut' as const
 
   // Anchor helpers — world-space x (no buildingsX — the parent layer handles pan)
-  const guideAHome = (() => {
+  const guideAHome = useMemo(() => {
     const info = buildingInfo[DISTRICT_A[0].id] // saloon
     if (!info) return sw * 0.02
     return info.cx - info.bw / 2 - 20 // left edge of saloon - 20px
-  })()
+  }, [buildingInfo, sw])
 
-  const guideBHome = (() => {
+  const guideBHome = useMemo(() => {
     const info = buildingInfo[DISTRICT_B[0].id] // bank
     if (!info) return sw * 0.65
     return info.cx - info.bw / 2 - 20 // left edge of bank - 20px
-  })()
+  }, [buildingInfo, sw])
 
   const moveGuide = useCallback(
     (
@@ -314,13 +320,21 @@ export function WesternTown() {
       ) => void,
       targetX: number,
       currentXRef: React.MutableRefObject<number>,
-      setFacing: (f: 1 | -1) => void
+      setFacing: (f: 1 | -1) => void,
+      setMoving: (m: boolean) => void,
+      moveTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
     ) => {
       if (!scope.current) return
+      // Skip animation if already at target (no movement, no walk cycle)
+      if (targetX === currentXRef.current) return
       const facing: 1 | -1 = targetX >= currentXRef.current ? 1 : -1
       setFacing(facing)
       currentXRef.current = targetX
       animate(scope.current, { x: targetX }, { duration: WALK_DUR, ease: WALK_EASE })
+      // Start walk animation, auto-stop after WALK_DUR
+      setMoving(true)
+      if (moveTimerRef.current) clearTimeout(moveTimerRef.current)
+      moveTimerRef.current = setTimeout(() => setMoving(false), WALK_DUR * 1000)
       // eslint-disable-next-line react-hooks/exhaustive-deps
     },
     []
@@ -328,6 +342,13 @@ export function WesternTown() {
 
   useEffect(() => {
     if (isZooming) return
+    // Initialize refs on first run — guideAX/guideBX start at 0 but guides are
+    // already positioned at home via `initial={{ x: initialX }}`. Without this,
+    // the first moveGuide call sees targetX !== 0 and triggers a phantom walk on
+    // mount, keeping isMoving=true and blocking the breathing animation.
+    if (guideAX.current === 0) guideAX.current = guideAHome
+    if (guideBX.current === 0) guideBX.current = guideBHome
+
     const inA = hoveredBuilding ? DISTRICT_A.some((b) => b.id === hoveredBuilding) : false
     const inB = hoveredBuilding ? DISTRICT_B.some((b) => b.id === hoveredBuilding) : false
 
@@ -335,24 +356,23 @@ export function WesternTown() {
     if (inA && hoveredBuilding) {
       const info = buildingInfo[hoveredBuilding]
       if (info) {
-        const targetX = info.cx - 10 // world-space; parent layer handles pan
-        moveGuide(guideAScope, animateGuideA, targetX, guideAX, setGuideAFacing)
+        const targetX = info.cx - 10
+        moveGuide(guideAScope, animateGuideA, targetX, guideAX, setGuideAFacing, setGuideAMoving, guideAMoveTimer)
       }
     } else {
-      moveGuide(guideAScope, animateGuideA, guideAHome, guideAX, setGuideAFacing)
+      moveGuide(guideAScope, animateGuideA, guideAHome, guideAX, setGuideAFacing, setGuideAMoving, guideAMoveTimer)
     }
 
     // Guide B
     if (inB && hoveredBuilding) {
       const info = buildingInfo[hoveredBuilding]
       if (info) {
-        const targetX = info.cx - 10 // world-space; parent layer handles pan
-        moveGuide(guideBScope, animateGuideB, targetX, guideBX, setGuideBFacing)
+        const targetX = info.cx - 10
+        moveGuide(guideBScope, animateGuideB, targetX, guideBX, setGuideBFacing, setGuideBMoving, guideBMoveTimer)
       }
     } else {
-      moveGuide(guideBScope, animateGuideB, guideBHome, guideBX, setGuideBFacing)
+      moveGuide(guideBScope, animateGuideB, guideBHome, guideBX, setGuideBFacing, setGuideBMoving, guideBMoveTimer)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hoveredBuilding, isZooming, guideAHome, guideBHome])
 
   // ── Door reveal → fade → navigate ────────────────────────────────────────
@@ -1101,6 +1121,7 @@ export function WesternTown() {
             sh={sh}
             initialX={guideAHome}
             scaleX={guideAFacing}
+            isMoving={guideAMoving}
           />
           <DistrictGuide
             guideScope={guideBScope}
@@ -1108,6 +1129,7 @@ export function WesternTown() {
             sh={sh}
             initialX={guideBHome}
             scaleX={guideBFacing}
+            isMoving={guideBMoving}
           />
         </motion.div>
       </div>

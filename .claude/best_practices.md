@@ -160,6 +160,25 @@ const FOREGROUND_SCALE = 1 / SEATED_SCALE // deprecated
 
 ---
 
+## `[TOWN_LOGIC]` `[ANIMATION]` — DistrictGuide isMoving / Breathing Animation (2026-04-09)
+
+**PATTERN: Three things must all be true for timer-based isMoving to work correctly.**
+
+1. **Memoize derived positions** — `buildingInfo`, `guideAHome`, `guideBHome` must all be `useMemo` (not IIFEs). IIFEs recompute every render; if they're in effect deps they re-trigger `moveGuide` on every mouse-move, permanently resetting the `isMoving=false` timer before it fires.
+
+2. **Memoize `buildingInfo` on `[sw, sh, isPixelArt]`** — these are the only values that can change it. `sw`/`sh` come from `useBezel` which only updates on `resize`, so the memo is stable during normal interaction.
+
+3. **Initialize position-tracking refs to match the rendered initial position** — `guideAX` and `guideBX` start at `0` but the guides render at `guideAHome` via `initial={{ x: initialX }}`. On the first effect call, `targetX !== 0` triggers a phantom walk to home, sets `isMoving=true` for 1.5s. Fix: at the top of the effect, sync refs to home values if they haven't been set yet:
+   ```js
+   if (guideAX.current === 0) guideAX.current = guideAHome
+   if (guideBX.current === 0) guideBX.current = guideBHome
+   ```
+   After this, the first `moveGuide` call sees `targetX === currentXRef.current` → early return → `isMoving` never goes true → breathing plays from frame 1 on mount.
+
+**Why:** Without all three, the breathing animation never plays — `isMoving` stays permanently `true` because either (a) re-renders keep resetting the timer, or (b) the phantom mount-walk sets `isMoving=true` before the user even touches the page.
+
+---
+
 ## `[TOWN_LOGIC]` `[TOWN_PIXEL_ART]` — buildingInfo as Single Source of Truth (2026-04-06)
 
 **PATTERN: All building-derived positions (NavMarkers AND DistrictGuide cowboys) read from `buildingInfo`. Fixing cx there fixes both simultaneously.**

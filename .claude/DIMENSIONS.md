@@ -25,6 +25,10 @@ All PNGs live in `src/assets/images/town/`.
 | contact-closed.png | 1024×1024 | 718×502    | 41.0      | 10.0      | 14.9       | 14.9        | Shortest building — 41% top padding            |
 | contact-open.png   | 1024×1024 | 716×528    | 40.9      | 7.5       | 15.0       | 15.0        |                                                |
 
+| navcowboy-front.png | 1380×752  | ~400×680   | —         | —         | —          | —           | Standing pose (unused — replaced by breath cycle). Landscape canvas.          |
+| walk tile000–005    | 344×512   | ~280×480   | —         | —         | —          | —           | 6 walk frames (portrait). Rendered at 80×120 via objectFit:contain, 250ms/frame |
+| breath tile000–005  | 344×512   | ~280×480   | —         | —         | —          | —           | 6 breath/idle frames (portrait). Rendered at 80×120 via objectFit:contain, 333ms/frame |
+
 ### Key Takeaways
 
 - **road.png** only has visual content in the **top 50%**. Fix: use `<img height="200%">` inside an `overflow:hidden` container + `objectFit: cover` + `objectPosition: top`. This fills the container with road texture only.
@@ -102,6 +106,7 @@ Mesa (z:14) < Road (z:15): road covers mesa base at horizon.
 | Road                | `0`                                            | `sh * 0.10`                                | 160%                | -30%                                          | —                                                                                      | —                                                                                                                                                 |
 | Road img            | —                                              | 200%                                       | 100%                | —                                             | cover                                                                                  | top                                                                                                                                               |
 | Title card          | top: `sh * 0.06`                               | SVG: `gridWidth/2.1` (driver: `sh*0.26`) / PNG: `gridWidth/2.1` (driver: `sh*0.38`) | SVG: `min(sh*0.26*2.1, sw*0.8)` / PNG: `min(sh*0.38*2.1, sw*0.8)` | centered (left:0,right:0) | SVG: n/a (grid div) / PNG: contain (preserves native aspect ratio) | — |
+| DistrictGuide       | `bottom: sh * 0.10`                            | 30px rendered                              | 20px rendered       | left: 0 (x set by useAnimate)                 | contain                                                                                | bottom center                                                                                                                                     |
 | Cowboys             | computed                                       | per char                                   | per char            | —                                             | —                                                                                      | —                                                                                                                                                 |
 | Tumbleweeds         | `sh * 0.105` / `sh * 0.10`                     | 16px / 12px                                | —                   | —                                             | —                                                                                      | —                                                                                                                                                 |
 
