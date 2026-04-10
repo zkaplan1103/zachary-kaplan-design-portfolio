@@ -779,18 +779,23 @@ export function WesternTown() {
         </motion.div>
 
         {/* ═══════ z:20 — AMBIENT CHARACTERS ═══════ */}
-        {activeChars.map(({ instanceId, def, direction }) => (
-          <AmbientEntity
-            key={instanceId}
-            instanceId={instanceId}
-            def={def}
-            sw={sw}
-            sh={sh}
-            direction={direction}
-            onComplete={handleEntityComplete}
-            yOffset={isPixelArt ? sh * -0.065 : 0}
-          />
-        ))}
+        {/* Wrapped in buildingsMV so characters pan with the world at the same
+            parallax rate as buildings (sw * -0.15). Without this they stay fixed
+            while the town pans, creating a "stuck then catch-up" lag effect.    */}
+        <motion.div style={{ x: buildingsMV, position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 20 }}>
+          {activeChars.map(({ instanceId, def, direction }) => (
+            <AmbientEntity
+              key={instanceId}
+              instanceId={instanceId}
+              def={def}
+              sw={sw}
+              sh={sh}
+              direction={direction}
+              onComplete={handleEntityComplete}
+              yOffset={isPixelArt ? sh * -0.065 : 0}
+            />
+          ))}
+        </motion.div>
 
         {/* ═══════ z:30 — BUILDINGS — District A (left) + Stage gap + District B (right) ═══════ */}
         {[
