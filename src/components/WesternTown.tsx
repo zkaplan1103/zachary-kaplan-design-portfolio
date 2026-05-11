@@ -661,8 +661,8 @@ export function WesternTown() {
           </motion.div>
         )}
 
-        {/* ═══════ z:35 — 2×2 TITLE CARD ═══════ */}
-        <motion.div
+        {/* ═══════ z:35 — 2×2 TITLE CARD (commented out — add back later) ═══════ */}
+        {/* <motion.div
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3, ease: 'easeOut' as const }}
@@ -716,7 +716,6 @@ export function WesternTown() {
               />
             ))}
 
-            {/* ZK DESIGNS overlay */}
             <div
               style={{
                 position: 'absolute',
@@ -776,7 +775,7 @@ export function WesternTown() {
           >
             frontend designer / developer
           </p>
-        </motion.div>
+        </motion.div> */}
 
         {/* ═══════ z:20 — AMBIENT CHARACTERS ═══════ */}
         {/* Wrapped in buildingsMV so characters pan with the world at the same
@@ -1196,8 +1195,8 @@ export function WesternTown() {
         {isPixelArt ? '\u25A0' : '\u25B3'}
       </motion.button>
 
-      {/* Bottom CTA text */}
-      <motion.p
+      {/* Bottom CTA text (commented out — add back later) */}
+      {/* <motion.p
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.2 }}
@@ -1218,7 +1217,7 @@ export function WesternTown() {
         }}
       >
         click a building to enter
-      </motion.p>
+      </motion.p> */}
 
       {/* ═══════ z:51 — MINI-HORSE EASTER EGG ═══════ */}
       <motion.div

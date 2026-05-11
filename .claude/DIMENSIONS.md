@@ -26,8 +26,8 @@ All PNGs live in `src/assets/images/town/`.
 | contact-open.png   | 1024×1024 | 716×528    | 40.9      | 7.5       | 15.0       | 15.0        |                                                |
 
 | navcowboy-front.png | 1380×752  | ~400×680   | —         | —         | —          | —           | Standing pose (unused — replaced by breath cycle). Landscape canvas.          |
-| walk tile000–005    | 344×512   | ~280×480   | —         | —         | —          | —           | DistrictGuide walk frames (portrait). Rendered at 80×120 via objectFit:contain, 250ms/frame |
-| breath tile000–005  | 344×512   | ~280×480   | —         | —         | —          | —           | DistrictGuide breath/idle frames (portrait). Rendered at 80×120 via objectFit:contain, 333ms/frame |
+| walk tile000–005    | 344×512   | ~280×480   | —         | —         | —          | —           | DistrictGuide walk frames (portrait). Rendered at 60×90 via objectFit:contain, 250ms/frame |
+| breath tile000–005  | 344×512   | ~280×480   | —         | —         | —          | —           | DistrictGuide breath/idle frames (portrait). Rendered at 60×90 via objectFit:contain, 333ms/frame |
 | robber tile000–005  | 344×512   | —          | —         | —         | —          | —           | BANK_ROBBER ambient PNG sprite. 6 frames, 100ms/frame (0.6s cycle). Rendered at w:40×scale h:60×scale = 36×54px at scale 0.9. speed:32s (slow sneak). No glow filter. RTL: scaleX(-1) on wrapper. |
 
 ### Key Takeaways

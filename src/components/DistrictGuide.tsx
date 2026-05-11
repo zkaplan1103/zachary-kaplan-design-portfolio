@@ -27,9 +27,9 @@ const WALK_FRAME_MS   = 250
 const BREATH_FRAME_MS = 333
 
 // ─── Sprite dimensions ────────────────────────────────────────────────────────
-// All frames (walk + breath): 344×512 portrait — rendered at 80×120 via objectFit:contain.
-const W = 80
-const H = 120
+// All frames (walk + breath): 344×512 portrait — rendered at 60×90 via objectFit:contain.
+const W = 60
+const H = 90
 
 // ─── Props ────────────────────────────────────────────────────────────────────
 
