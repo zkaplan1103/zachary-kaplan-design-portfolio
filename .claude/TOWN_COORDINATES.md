@@ -35,12 +35,12 @@ The SVG layout IS the coordinate system. When adding pixel art mode, every PNG e
 
 ### Ambient character yPct values
 
-| Character   | yPct  | Notes                        |
-| ----------- | ----- | ---------------------------- |
-| HORSE_WAGON | 0.905 | Unified ground line          |
-| COWBOY_WALK | 0.905 | Reference — visually correct |
-| NIGHT_RIDER | 0.905 | Unified ground line          |
-| BANK_ROBBER | 0.905 | Unified ground line          |
+| Character   | yPct  | Visual   | Notes                                                                                  |
+| ----------- | ----- | -------- | -------------------------------------------------------------------------------------- |
+| HORSE_WAGON | 0.905 | SVG      | Unified ground line                                                                    |
+| COWBOY_WALK | 0.905 | SVG      | Reference — visually correct                                                           |
+| NIGHT_RIDER | 0.905 | SVG      | Unified ground line                                                                    |
+| BANK_ROBBER | 0.905 | PNG      | PNG sprites from `town-sprites/robber/tile000–005.png`. width:40 height:60 scale:0.9 → renders 36×54px. speed:32s (slow sneak). 6 frames × 100ms. No glow filter. RTL uses scaleX(-1) on wrapper — no left-facing sprites. nightOnly:true |
 
 ---
 

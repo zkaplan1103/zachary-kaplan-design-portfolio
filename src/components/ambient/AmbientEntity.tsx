@@ -1,5 +1,17 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
+
+// ─── Robber PNG sprite imports ────────────────────────────────────────────────
+
+import robber0 from '@/assets/images/town-sprites/robber/tile000.png'
+import robber1 from '@/assets/images/town-sprites/robber/tile001.png'
+import robber2 from '@/assets/images/town-sprites/robber/tile002.png'
+import robber3 from '@/assets/images/town-sprites/robber/tile003.png'
+import robber4 from '@/assets/images/town-sprites/robber/tile004.png'
+import robber5 from '@/assets/images/town-sprites/robber/tile005.png'
+
+const ROBBER_FRAMES = [robber0, robber1, robber2, robber3, robber4, robber5]
+const ROBBER_FRAME_MS = 100  // 6 frames × 100ms = 0.6s walk cycle
 
 // ─── Character manifest ──────────────────────────────────────────────────────
 //
@@ -58,13 +70,13 @@ export const CHARACTER_MANIFEST: CharacterDef[] = [
   {
     id: 'BANK_ROBBER',
     yPct: 0.905,
-    speed: 18,
+    speed: 32,
     scale: 0.9,
     nightOnly: true,
     color: '#80c0ff',
     glowColor: 'rgba(128,192,255,0.5)',
-    width: 20,
-    height: 36,
+    width: 40,
+    height: 60,
   },
 ]
 
@@ -148,34 +160,50 @@ function NightRiderSvg({ color }: { color: string }) {
   )
 }
 
-function BankRobberSvg({ color }: { color: string }) {
-  return (
-    <svg viewBox="0 0 20 36" width="20" height="36" fill="none" aria-hidden="true">
-      {/* Hat — wider brim, low crown (outlaw style) */}
-      <line x1="1" y1="6" x2="19" y2="6" stroke={color} strokeWidth="1.5" />
-      <rect x="4" y="2" width="12" height="4" rx="1" stroke={color} strokeWidth="1.5" />
-      {/* Head */}
-      <circle cx="10" cy="11" r="4" stroke={color} strokeWidth="1.5" />
-      {/* Mask line across face */}
-      <line x1="6" y1="11" x2="14" y2="11" stroke={color} strokeWidth="1" />
-      {/* Body — hunched */}
-      <line x1="10" y1="15" x2="9" y2="26" stroke={color} strokeWidth="2" />
-      {/* Arms — one raised with bag */}
-      <line x1="9" y1="18" x2="2" y2="16" stroke={color} strokeWidth="1.5" />
-      <circle cx="1" cy="16" r="3" stroke={color} strokeWidth="1.5" />
-      <line x1="9" y1="18" x2="16" y2="22" stroke={color} strokeWidth="1.5" />
-      {/* Legs — running */}
-      <line x1="9" y1="26" x2="4" y2="35" stroke={color} strokeWidth="1.5" />
-      <line x1="9" y1="26" x2="13" y2="33" stroke={color} strokeWidth="1.5" />
-    </svg>
-  )
-}
-
-const SVG_MAP: Record<CharacterId, (color: string) => React.ReactNode> = {
+const SVG_MAP: Record<Exclude<CharacterId, 'BANK_ROBBER'>, (color: string) => React.ReactNode> = {
   HORSE_WAGON:  (c) => <HorseWagonSvg color={c} />,
   COWBOY_WALK:  (c) => <CowboyWalkSvg color={c} />,
   NIGHT_RIDER:  (c) => <NightRiderSvg color={c} />,
-  BANK_ROBBER:  (c) => <BankRobberSvg color={c} />,
+}
+
+// ─── Robber PNG sprite ────────────────────────────────────────────────────────
+
+function RobberSprite({ direction, scaledW, scaledH }: { direction: 'ltr' | 'rtl'; scaledW: number; scaledH: number }) {
+  const [frameIdx, setFrameIdx] = useState(0)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    intervalRef.current = setInterval(() => {
+      setFrameIdx((i) => (i + 1) % ROBBER_FRAMES.length)
+    }, ROBBER_FRAME_MS)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [])
+
+  return (
+    <div style={{
+      width:           scaledW,
+      height:          scaledH,
+      transform:       direction === 'rtl' ? 'scaleX(-1)' : undefined,
+      transformOrigin: 'center center',
+    }}>
+      <img
+        src={ROBBER_FRAMES[frameIdx]}
+        alt=""
+        aria-hidden="true"
+        draggable={false}
+        style={{
+          display:        'block',
+          width:          scaledW,
+          height:         scaledH,
+          objectFit:      'contain',
+          objectPosition: 'bottom center',
+          imageRendering: 'pixelated',
+        }}
+      />
+    </div>
+  )
 }
 
 // ─── Props ───────────────────────────────────────────────────────────────────
@@ -231,21 +259,25 @@ export function AmbientEntity({ instanceId, def, sw, sh, direction, onComplete, 
         height:        scaledH,
         zIndex:        20,   // between ground (z:15) and buildings (z:30)
         pointerEvents: 'none',
-        filter:        `drop-shadow(0 0 4px ${def.glowColor}) drop-shadow(0 0 8px ${def.glowColor})`,
+        filter:        def.id === 'BANK_ROBBER' ? 'none' : `drop-shadow(0 0 4px ${def.glowColor}) drop-shadow(0 0 8px ${def.glowColor})`,
       }}
     >
-      <div
-        style={{
-          ...flipStyle,
-          width:  scaledW,
-          height: scaledH,
-          transformOrigin: 'center center',
-        }}
-      >
-        <div style={{ transform: `scale(${def.scale})`, transformOrigin: 'top left' }}>
-          {SVG_MAP[def.id](def.color)}
+      {def.id === 'BANK_ROBBER' ? (
+        <RobberSprite direction={direction} scaledW={scaledW} scaledH={scaledH} />
+      ) : (
+        <div
+          style={{
+            ...flipStyle,
+            width:  scaledW,
+            height: scaledH,
+            transformOrigin: 'center center',
+          }}
+        >
+          <div style={{ transform: `scale(${def.scale})`, transformOrigin: 'top left' }}>
+            {SVG_MAP[def.id as Exclude<CharacterId, 'BANK_ROBBER'>](def.color)}
+          </div>
         </div>
-      </div>
+      )}
     </motion.div>
   )
 }
