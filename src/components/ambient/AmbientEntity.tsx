@@ -3,15 +3,15 @@ import { motion } from 'framer-motion'
 
 // ─── Robber PNG sprite imports ────────────────────────────────────────────────
 
-import robber0 from '@/assets/images/town-sprites/robber/tile000.png'
-import robber1 from '@/assets/images/town-sprites/robber/tile001.png'
-import robber2 from '@/assets/images/town-sprites/robber/tile002.png'
-import robber3 from '@/assets/images/town-sprites/robber/tile003.png'
-import robber4 from '@/assets/images/town-sprites/robber/tile004.png'
-import robber5 from '@/assets/images/town-sprites/robber/tile005.png'
+import robber0 from '@/assets/images/town-sprites/badass_pixel_art_bank_robber_retro_SNES_style_long/states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_000.png'
+import robber1 from '@/assets/images/town-sprites/badass_pixel_art_bank_robber_retro_SNES_style_long/states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_001.png'
+import robber2 from '@/assets/images/town-sprites/badass_pixel_art_bank_robber_retro_SNES_style_long/states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_002.png'
+import robber3 from '@/assets/images/town-sprites/badass_pixel_art_bank_robber_retro_SNES_style_long/states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_003.png'
+import robber4 from '@/assets/images/town-sprites/badass_pixel_art_bank_robber_retro_SNES_style_long/states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_004.png'
+import robber5 from '@/assets/images/town-sprites/badass_pixel_art_bank_robber_retro_SNES_style_long/states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_005.png'
 
 const ROBBER_FRAMES = [robber0, robber1, robber2, robber3, robber4, robber5]
-const ROBBER_FRAME_MS = 100  // 6 frames × 100ms = 0.6s walk cycle
+const ROBBER_FRAME_MS = 120  // 6 frames × 120ms = 0.72s walk cycle
 
 // ─── Character manifest ──────────────────────────────────────────────────────
 //

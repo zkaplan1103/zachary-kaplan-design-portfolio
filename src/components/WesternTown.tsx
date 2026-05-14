@@ -9,27 +9,54 @@ import { DistrictGuide } from '@/components/DistrictGuide'
 import { NavMarker } from '@/components/NavMarker'
 import type { CharacterDef } from '@/components/ambient/AmbientEntity'
 
-// ─── Pixel art PNG imports ────────────────────────────────────────────────────
+// ─── Nav guide sprite imports ─────────────────────────────────────────────────
+
+import sheriffWalk0 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_000.png'
+import sheriffWalk1 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_001.png'
+import sheriffWalk2 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_002.png'
+import sheriffWalk3 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_003.png'
+import sheriffIdle0 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_000.png'
+import sheriffIdle1 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_001.png'
+import sheriffIdle2 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_002.png'
+import sheriffIdle3 from '@/assets/images/town-sprites/badass_pixel_art_sheriff_retro_SNES_style_long_dar/states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_003.png'
+
+import fsheriffWalk0 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_000.png'
+import fsheriffWalk1 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_001.png'
+import fsheriffWalk2 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_002.png'
+import fsheriffWalk3 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_003.png'
+import fsheriffIdle0 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_000.png'
+import fsheriffIdle1 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_001.png'
+import fsheriffIdle2 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_002.png'
+import fsheriffIdle3 from '@/assets/images/town-sprites/badass_pixel_art_female_sheriff_long_dark_duster_c/states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_003.png'
+
+const MALE_SHERIFF_WALK   = [sheriffWalk0,  sheriffWalk1,  sheriffWalk2,  sheriffWalk3]
+const MALE_SHERIFF_IDLE   = [sheriffIdle0,  sheriffIdle1,  sheriffIdle2,  sheriffIdle3]
+const FEMALE_SHERIFF_WALK = [fsheriffWalk0, fsheriffWalk1, fsheriffWalk2, fsheriffWalk3]
+const FEMALE_SHERIFF_IDLE = [fsheriffIdle0, fsheriffIdle1, fsheriffIdle2, fsheriffIdle3]
+
+// ─── Pixel art PNG imports ─────────────────────────────────────────────────────
 
 import nightskyPng from '@/assets/images/town/sky.png'
 import moonPng from '@/assets/images/town/moon.png'
 import mesaPng from '@/assets/images/town/mesa.png'
 import roadPng from '@/assets/images/town/road.png'
-import saloonClosedPng from '@/assets/images/town/saloon-closed.png'
-import saloonOpenPng from '@/assets/images/town/saloon-open.png'
-import sheriffClosedPng from '@/assets/images/town/sheriff-closed.png'
-import sheriffOpenPng from '@/assets/images/town/sheriff-open.png'
-import bankClosedPng from '@/assets/images/town/bank-closed.png'
-import bankOpenPng from '@/assets/images/town/bank-open.png'
-import contactClosedPng from '@/assets/images/town/contact-closed.png'
-import contactOpenPng from '@/assets/images/town/contact-open.png'
+import saloonPng from '@/assets/images/town/better-saloon.png'
+import sheriffPng from '@/assets/images/town/better-sherif.png'
+import bankPng from '@/assets/images/town/better-bank.png'
+import cabinPng from '@/assets/images/town/better-cabin.png'
 import titlecardPng from '@/assets/images/town/titlecard.png'
 
+// Open variants commented out — door animation disabled until open PNGs added
+// import saloonOpenPng from '@/assets/images/town/saloon-open.png'
+// import sheriffOpenPng from '@/assets/images/town/sheriff-open.png'
+// import bankOpenPng from '@/assets/images/town/bank-open.png'
+// import contactOpenPng from '@/assets/images/town/contact-open.png'
+
 const BUILDING_IMAGES: Record<string, { closed: string; open: string }> = {
-  saloon: { closed: saloonClosedPng, open: saloonOpenPng },
-  sheriff: { closed: sheriffClosedPng, open: sheriffOpenPng },
-  bank: { closed: bankClosedPng, open: bankOpenPng },
-  telegraph: { closed: contactClosedPng, open: contactOpenPng },
+  saloon:    { closed: saloonPng,  open: saloonPng  },
+  sheriff:   { closed: sheriffPng, open: sheriffPng },
+  bank:      { closed: bankPng,    open: bankPng    },
+  telegraph: { closed: cabinPng,   open: cabinPng   },
 }
 
 // ─── Sky gradients (5-stop warm sunset) ─────────────────────────────────────
@@ -325,9 +352,12 @@ export function WesternTown() {
       moveTimerRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>
     ) => {
       if (!scope.current) return
-      // Skip animation if already at target (no movement, no walk cycle)
-      if (targetX === currentXRef.current) return
-      const facing: 1 | -1 = targetX >= currentXRef.current ? 1 : -1
+      // Read live animated x from the DOM transform so rapid hovers don't use a
+      // stale target as the "current" position, which would flip the facing direction.
+      const rawTransform = new DOMMatrix(getComputedStyle(scope.current).transform)
+      const liveX = isFinite(rawTransform.m41) ? rawTransform.m41 : currentXRef.current
+      if (targetX === liveX) return
+      const facing: 1 | -1 = targetX >= liveX ? 1 : -1
       setFacing(facing)
       currentXRef.current = targetX
       animate(scope.current, { x: targetX }, { duration: WALK_DUR, ease: WALK_EASE })
@@ -854,7 +884,7 @@ export function WesternTown() {
                       }}
                     >
                       <img
-                        src={isHovered ? imgs.open : imgs.closed}
+                        src={imgs.closed /* open variant disabled — add back when open PNGs exist: isHovered ? imgs.open : imgs.closed */}
                         alt={bldg.id}
                         draggable={false}
                         style={{
@@ -1126,6 +1156,8 @@ export function WesternTown() {
             initialX={guideAHome}
             scaleX={guideAFacing}
             isMoving={guideAMoving}
+            walkFrames={MALE_SHERIFF_WALK}
+            idleFrames={MALE_SHERIFF_IDLE}
           />
           <DistrictGuide
             guideScope={guideBScope}
@@ -1134,6 +1166,8 @@ export function WesternTown() {
             initialX={guideBHome}
             scaleX={guideBFacing}
             isMoving={guideBMoving}
+            walkFrames={FEMALE_SHERIFF_WALK}
+            idleFrames={FEMALE_SHERIFF_IDLE}
           />
         </motion.div>
       </div>

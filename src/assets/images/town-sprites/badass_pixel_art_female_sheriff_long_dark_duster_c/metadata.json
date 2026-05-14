@@ -1,0 +1,49 @@
+{
+  "group_id": null,
+  "states": [
+    {
+      "character": {
+        "id": "8cdb17bf-6f73-42a5-9af4-ca346be270ac",
+        "name": "badass pixel art female sheriff, \nlong dark duster coat, cowboy hat, star badge,\ngritty western vibe, chunky pixels, flat colors, bold outlines",
+        "prompt": "badass pixel art female sheriff, \nlong dark duster coat, cowboy hat, star badge,\ngritty western vibe, chunky pixels, flat colors, bold outlines",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "template_id": "mannequin",
+        "directions": 4,
+        "view": "side",
+        "created_at": "2026-05-13T19:40:44.928315+00:00"
+      },
+      "folder": "states/badass_pixel_art_female_sheriff_long_dark_duster_c",
+      "frames": {
+        "rotations": {
+          "south": "states/badass_pixel_art_female_sheriff_long_dark_duster_c/rotations/south.png",
+          "west": "states/badass_pixel_art_female_sheriff_long_dark_duster_c/rotations/west.png",
+          "east": "states/badass_pixel_art_female_sheriff_long_dark_duster_c/rotations/east.png",
+          "north": "states/badass_pixel_art_female_sheriff_long_dark_duster_c/rotations/north.png"
+        },
+        "animations": {
+          "Walking-640b08a6": {
+            "east": [
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_000.png",
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_001.png",
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_002.png",
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Walking-640b08a6/east/frame_003.png"
+            ]
+          },
+          "Breathing_Idle-0056193a": {
+            "south": [
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_000.png",
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_001.png",
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_002.png",
+              "states/badass_pixel_art_female_sheriff_long_dark_duster_c/animations/Breathing_Idle-0056193a/south/frame_003.png"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "export_version": "3.0",
+  "export_date": "2026-05-13T19:58:21.666771"
+}

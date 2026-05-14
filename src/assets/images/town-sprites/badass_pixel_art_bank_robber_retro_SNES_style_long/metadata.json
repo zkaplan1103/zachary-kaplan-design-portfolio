@@ -1,0 +1,43 @@
+{
+  "group_id": null,
+  "states": [
+    {
+      "character": {
+        "id": "8a9ccf25-ee1f-476c-9112-df931ab146a2",
+        "name": "badass pixel art bank robber, retro SNES style,long dark coat, wide brim hat, bandana covering face and wrapped all around head,gritty western outlaw vibe, sack of money over shoulder,chunky pixels, flat colors, bold outlines. ",
+        "prompt": "badass pixel art bank robber, retro SNES style,long dark coat, wide brim hat, bandana covering face and wrapped all around head,gritty western outlaw vibe, sack of money over shoulder,chunky pixels, flat colors, bold outlines. ",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "template_id": "mannequin",
+        "directions": 4,
+        "view": "side",
+        "created_at": "2026-05-14T15:25:26.914306+00:00"
+      },
+      "folder": "states/badass_pixel_art_bank_robber_retro_SNES_style_long",
+      "frames": {
+        "rotations": {
+          "south": "states/badass_pixel_art_bank_robber_retro_SNES_style_long/rotations/south.png",
+          "west": "states/badass_pixel_art_bank_robber_retro_SNES_style_long/rotations/west.png",
+          "east": "states/badass_pixel_art_bank_robber_retro_SNES_style_long/rotations/east.png",
+          "north": "states/badass_pixel_art_bank_robber_retro_SNES_style_long/rotations/north.png"
+        },
+        "animations": {
+          "Crouched_Walking-26ed7bf3": {
+            "east": [
+              "states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_000.png",
+              "states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_001.png",
+              "states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_002.png",
+              "states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_003.png",
+              "states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_004.png",
+              "states/badass_pixel_art_bank_robber_retro_SNES_style_long/animations/Crouched_Walking-26ed7bf3/east/frame_005.png"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "export_version": "3.0",
+  "export_date": "2026-05-14T15:32:36.852004"
+}

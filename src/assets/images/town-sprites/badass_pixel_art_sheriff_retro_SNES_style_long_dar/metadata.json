@@ -1,0 +1,55 @@
+{
+  "group_id": null,
+  "states": [
+    {
+      "character": {
+        "id": "f0845c0a-6203-4982-9350-b23efb0ac65f",
+        "name": "badass pixel art sheriff, retro SNES style, \nlong dark duster coat, cowboy hat, star badge,\ngritty western outlaw hunter vibe,\nchunky pixels, flat colors, bold outlines",
+        "prompt": "badass pixel art sheriff, retro SNES style, \nlong dark duster coat, cowboy hat, star badge,\ngritty western outlaw hunter vibe,\nchunky pixels, flat colors, bold outlines",
+        "size": {
+          "width": 92,
+          "height": 92
+        },
+        "template_id": "mannequin",
+        "directions": 4,
+        "view": "side",
+        "created_at": "2026-05-13T19:20:00.46641+00:00"
+      },
+      "folder": "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar",
+      "frames": {
+        "rotations": {
+          "south": "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/rotations/south.png",
+          "west": "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/rotations/west.png",
+          "east": "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/rotations/east.png",
+          "north": "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/rotations/north.png"
+        },
+        "animations": {
+          "Breathing_Idle-f1bd81e0": {
+            "south": [
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/south/frame_000.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/south/frame_001.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/south/frame_002.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/south/frame_003.png"
+            ],
+            "east": [
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_000.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_001.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_002.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Breathing_Idle-f1bd81e0/east/frame_003.png"
+            ]
+          },
+          "Walking-ddb7b148": {
+            "east": [
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_000.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_001.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_002.png",
+              "states/badass_pixel_art_sheriff_retro_SNES_style_long_dar/animations/Walking-ddb7b148/east/frame_003.png"
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "export_version": "3.0",
+  "export_date": "2026-05-13T19:57:50.656439"
+}

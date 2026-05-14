@@ -25,10 +25,10 @@ All PNGs live in `src/assets/images/town/`.
 | contact-closed.png | 1024×1024 | 718×502    | 41.0      | 10.0      | 14.9       | 14.9        | Shortest building — 41% top padding            |
 | contact-open.png   | 1024×1024 | 716×528    | 40.9      | 7.5       | 15.0       | 15.0        |                                                |
 
-| navcowboy-front.png | 1380×752  | ~400×680   | —         | —         | —          | —           | Standing pose (unused — replaced by breath cycle). Landscape canvas.          |
-| walk tile000–005    | 344×512   | ~280×480   | —         | —         | —          | —           | DistrictGuide walk frames (portrait). Rendered at 60×90 via objectFit:contain, 250ms/frame |
-| breath tile000–005  | 344×512   | ~280×480   | —         | —         | —          | —           | DistrictGuide breath/idle frames (portrait). Rendered at 60×90 via objectFit:contain, 333ms/frame |
-| robber tile000–005  | 344×512   | —          | —         | —         | —          | —           | BANK_ROBBER ambient PNG sprite. 6 frames, 100ms/frame (0.6s cycle). Rendered at w:40×scale h:60×scale = 36×54px at scale 0.9. speed:32s (slow sneak). No glow filter. RTL: scaleX(-1) on wrapper. |
+| navcowboy-front.png | 1380×752  | ~400×680   | —         | —         | —          | —           | Original nav cowboy standing pose (unused — replaced by sheriff sprites).     |
+| sheriff walk frame_000–003 | varies | — | — | — | — | — | DistrictGuide A (male sheriff). walk=Walking-ddb7b148/east, idle=Breathing_Idle-f1bd81e0/east. 4 frames. Walk:375ms/frame, Idle:500ms/frame. Rendered at 60×90. |
+| fsheriff walk frame_000–003 | varies | — | — | — | — | — | DistrictGuide B (female sheriff). walk=Walking-640b08a6/east, idle=Breathing_Idle-0056193a/south. 4 frames. Walk:375ms/frame, Idle:500ms/frame. Rendered at 60×90. |
+| robber Crouched_Walking frame_000–005 | varies | — | — | — | — | — | BANK_ROBBER ambient. 6 frames, 120ms/frame (0.72s cycle). Rendered at w:40×scale h:60×scale = 36×54px at scale 0.9. speed:32s sneak. No glow. RTL: scaleX(-1) on wrapper. |
 
 ### Key Takeaways
 
